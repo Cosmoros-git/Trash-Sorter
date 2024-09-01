@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Sandbox.ModAPI;
@@ -11,15 +12,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
     {
         private readonly HashSet<Sandbox.ModAPI.Ingame.MyInventoryItemFilter> myInventory_filter;
         private readonly IMyConveyorSorter _myConveyorSorter;
-        private HashSet<ModFilterItem> _items;
+        private readonly Dictionary<MyDefinitionId, ModFilterItem> _items;
         private readonly Stopwatch watch = new Stopwatch();
 
-        public ModFilterCollection(IMyConveyorSorter myConveyorSorter, HashSet<ModFilterItem> items)
+        public ModFilterCollection(IMyConveyorSorter myConveyorSorter, Dictionary<MyDefinitionId, ModFilterItem> items)
         {
             _myConveyorSorter = myConveyorSorter;
-            _items = items ?? new HashSet<ModFilterItem>();
+            _items = items;
+
+
             myInventory_filter = new HashSet<Sandbox.ModAPI.Ingame.MyInventoryItemFilter>();
-            foreach (var tulip in _items)
+            foreach (var tulip in _items.Values)
             {
                 tulip.OnItemOverLimit += Add_Filter_Item;
                 tulip.OnItemBelowLimit += Remove_Filter_Item;
@@ -29,25 +32,31 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         }
 
 
-        public HashSet<ModFilterItem> Items
+        public Dictionary<MyDefinitionId, ModFilterItem> Items
         {
             get { return _items; }
             set
             {
-                // Remove Tulips that are not in the new set
-                var itemsToRemove = _items.Except(value).ToList();
-                foreach (var item in itemsToRemove)
+                if (value == null) return;
+
+                // Remove items that are not in the new set
+                var itemsToRemove = _items.Keys.Except(value.Keys).ToList();
+                foreach (var key in itemsToRemove)
                 {
-                    Remove_Tulip_Filter(item);
+                    Remove_Tulip_Filter(_items[key]);
+                    _items.Remove(key);
                 }
 
-                // Replace the _items set with the new one
-                _items = value;
+                // Add or update items from the new set
+                foreach (var kvp in value)
+                {
+                    if (_items.ContainsKey(kvp.Key))
+                    {
+                        _items[kvp.Key] = kvp.Value;
+                    }
+                }
 
-                // Update the sorter filter only once after all removals
                 Update_Sorter_Filter();
-
-                // Parse the new items to update filters if necessary
                 Parse_To_Filters();
             }
         }
@@ -71,34 +80,31 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         public void Remove_Tulip_Filter(ModFilterItem item)
         {
-            if (!_items.Contains(item)) return;
-            _items.Remove(item);
+            if (!_items.ContainsKey(item.ItemId)) return;
+            _items.Remove(item.ItemId);
             item.OnItemBelowLimit -= Remove_Filter_Item;
             item.OnItemOverLimit -= Add_Filter_Item;
         }
 
         public void Add_ModFilterItem(ModFilterItem item)
         {
-            if (item == null) return;
-
-            if (!_items.Add(item))
+            ModFilterItem value;
+            if (_items.TryGetValue(item.ItemId, out value))
             {
-                // Update the existing item
-                foreach (var existingItem in _items.Where(existingItem => existingItem.Equals(item)))
-                {
-                    existingItem.Update_ModFilterItem(item.ItemRequestedLimit,item.ItemMaxLimit);
-                    item.Dispose();// Creating this heavy ass items is really bad.
-                    break;
-                }
+                value.Update_ModFilterItem(item.ItemRequestedLimit, item.ItemMaxLimit);
+                item.Dispose();
             }
             else
             {
-                // Add new item to the HashSet
                 item.OnItemBelowLimit += Remove_Filter_Item;
                 item.OnItemOverLimit += Add_Filter_Item;
             }
         }
 
+        public bool ContainsId(MyDefinitionId id, out ModFilterItem modFilterItem)
+        {
+            return _items.TryGetValue(id, out modFilterItem);
+        }
 
         private void Update_Sorter_Filter()
         {
@@ -110,7 +116,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         private void Parse_To_Filters()
         {
             watch.Restart();
-            foreach (var modFilterItem in _items)
+            foreach (var modFilterItem in _items.Values)
             {
                 if (modFilterItem.ItemMaxLimit == 0 && modFilterItem.ItemRequestedLimit == 0) return;
                 if (modFilterItem.ItemRequestedLimit < 0)
@@ -131,7 +137,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         public override void Dispose()
         {
-            foreach (var item in _items)
+            foreach (var item in _items.Values)
             {
                 item.OnItemBelowLimit -= Remove_Filter_Item;
                 item.OnItemOverLimit -= Add_Filter_Item;

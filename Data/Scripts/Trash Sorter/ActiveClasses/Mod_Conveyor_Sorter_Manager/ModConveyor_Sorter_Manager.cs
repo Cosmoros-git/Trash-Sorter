@@ -142,7 +142,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
             var aggregatedData = new StringBuilder();
             var lines = customData.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            var valuesReached = false;
 
             // Retrieve or create ModFilterCollection for the sorter
             ModFilterCollection modFilterCollection;
@@ -159,29 +158,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             foreach (var line in lines)
             {
                 var trimmedLine = line.Trim();
-
-                // Skip empty or whitespace lines
-                if (trimmedLine.Length == 0)
-                {
-                    continue;
-                }
-
-                // Handle comments
-                if (trimmedLine.StartsWith("//"))
+                if (string.IsNullOrWhiteSpace(trimmedLine))
                 {
                     aggregatedData.AppendLine(trimmedLine);
                     continue;
                 }
-
-                // Check for the start of the values section
-                if (!valuesReached)
+                // Handle comments
+                if (trimmedLine.StartsWith("//"))
                 {
-                    if (trimmedLine == "<Trash sorter filter>")
-                    {
-                        aggregatedData.AppendLine(trimmedLine);
-                        valuesReached = true;
-                    }
-
+                    aggregatedData.AppendLine(trimmedLine);
                     continue;
                 }
 
@@ -207,11 +192,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             }
         }
 
-        private void ProcessLineAndAddToCollection(string trimmedLine, IMyConveyorSorter sorter,
+        private void ProcessLineAndAddToCollection(string line, IMyConveyorSorter sorter,
             ModFilterCollection modFilterCollection, StringBuilder aggregatedData)
         {
             ModFilterItem item;
-            var processedLine = ProcessLine(trimmedLine, out item, sorter);
+            var processedLine = ProcessLine(line, out item, sorter);
 
             aggregatedData.AppendLine(processedLine);
 
@@ -226,19 +211,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         {
             // If the line is empty or consists only of whitespace, skip it
             filterItem = null;
-            if (string.IsNullOrWhiteSpace(trimmedLine))
-            {
-                return "";
-            }
 
             var parts = trimmedLine.Split(new[] { '|' }, StringSplitOptions.None);
             var firstEntry = parts[0].Trim();
-
-            // If the first part is empty or whitespace, it's not a valid identifier
-            if (string.IsNullOrWhiteSpace(firstEntry))
-            {
-                return "";
-            }
 
             MyDefinitionId definitionId;
             if (!Definitions_Reference.TryGetValue(firstEntry, out definitionId))
@@ -250,23 +225,28 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             float requestedAmount = 0;
             float maxLimitTrigger = 0;
 
-            if (parts.Length > 1 && !float.TryParse(parts[1].Trim(), out requestedAmount))
+            switch (parts.Length)
             {
-                requestedAmount = 0;
+                case 1:
+                    break;
+                case 2:
+                    float.TryParse(parts[1].Trim(), out requestedAmount);
+                    break;
+                case 3:
+                    float.TryParse(parts[1].Trim(), out requestedAmount);
+                    if (!float.TryParse(parts[2].Trim(), out maxLimitTrigger) ||
+                                             maxLimitTrigger < requestedAmount)
+                    {
+                        maxLimitTrigger = requestedAmount + 100;
+                    }
+                    break;
             }
-
-            if (parts.Length > 2 && (!float.TryParse(parts[2].Trim(), out maxLimitTrigger) ||
-                                     maxLimitTrigger < requestedAmount))
-            {
-                maxLimitTrigger = requestedAmount + 100;
-            }
-
-            // Conditionally create the filter item based on requestedAmount
+            // Create filter if request is above or below 0;
             filterItem = requestedAmount == 0
                 ? null
                 : Create_Filter(definitionId, requestedAmount, maxLimitTrigger, sorter);
 
-            // Return the processed line if the filter item was created, otherwise return null
+            // Return the line back for custom data.
             return $"{firstEntry} | {requestedAmount} | {maxLimitTrigger}";
         }
 
@@ -286,15 +266,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             IMyConveyorSorter sorter)
         {
             // Check if the item already exists
-            var existingItem = Sorter_Filter[sorter].Items.FirstOrDefault(x => x.ItemId == definitionId);
+           
 
-            if (existingItem != null)
+            ModFilterItem filterItem;
+            if (Sorter_Filter[sorter].ContainsId(definitionId, out filterItem))
             {
                 // If the item exists, update its properties
-                existingItem.Update_ModFilterItem((MyFixedPoint)requestedAmount, (MyFixedPoint)maxLimitTrigger);
+                filterItem.Update_ModFilterItem((MyFixedPoint)requestedAmount, (MyFixedPoint)maxLimitTrigger);
 
                 // Return the updated item
-                return existingItem;
+                return filterItem;
             }
 
             // If the item doesn't exist, create a new one and add it to the collection
