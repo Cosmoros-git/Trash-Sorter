@@ -53,7 +53,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         // ReSharper disable once InconsistentNaming
 
         private readonly Guid Guid = new Guid("f6ea728c-8890-4012-8c81-165593a65b86");
-        private readonly Guid GuidPriority = new Guid("f6ea728c-8890-4012-8c81-165593a65b85");
         private const string ClassName = "Main-Class";
         private readonly HashSet<IMyCubeGrid> connectedGrids = new HashSet<IMyCubeGrid>();
         private IMyCubeBlock block;
@@ -74,7 +73,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private int Initialization_Step;
 
         // ReSharper disable once NotAccessedField.Local
+#pragma warning disable IDE0052
         private Logger _logger;
+#pragma warning restore IDE0052
 
         public override void UpdateOnceBeforeFrame()
         {
@@ -260,8 +261,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-        private readonly object _storageLock = new object();
-
         private bool OverrideManagerBlock()
         {
             var myCubeBlock = (IMyCubeBlock)Entity;
@@ -338,7 +337,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private ItemStorage.Main_Storage_Class _mainStorageClass;
         private Inventory_Grid_Manager InventoryGridManager;
+        // ReSharper disable once NotAccessedField.Local
+#pragma warning disable IDE0052
         private ModConveyor_Sorter_Manager ModConveyorSorterManager;
+#pragma warning restore IDE0052
 
         public override void UpdateAfterSimulation10()
         {
@@ -348,7 +350,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 0:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    _mainStorageClass = new ItemStorage.Main_Storage_Class(Entity as IMyCubeBlock);
+                    _mainStorageClass = new Main_Storage_Class();
                     Initialization_Step++;
                     watch.Stop();
                     Logger.Instance.Log(ClassName, $"Initializing step 1. Time taken {watch}ms");
@@ -357,8 +359,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 1:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
-                    InventoryGridManager =
-                        new Inventory_Grid_Manager(Entity as IMyCubeBlock, _mainStorageClass, connectedGrids, gridOwner);
+                    InventoryGridManager = new Inventory_Grid_Manager(_mainStorageClass, connectedGrids, gridOwner);
                     Initialization_Step++;
                     watch.Stop();
                     Logger.Instance.Log(ClassName, $"Initializing step 1. Time taken {watch}ms");
@@ -366,8 +367,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 2:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
-                    ModConveyorSorterManager =
-                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass);
+                    ModConveyorSorterManager = new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass);
                     watch.Stop();
                     Logger.Instance.Log(ClassName, $"Initializing step 1. Time taken {watch}ms");
                     break;

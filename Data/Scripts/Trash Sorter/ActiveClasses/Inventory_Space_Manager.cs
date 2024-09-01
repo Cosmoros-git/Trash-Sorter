@@ -35,7 +35,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private readonly Stopwatch StopWatch = new Stopwatch();
         private float elapsedTime;
 
-        public Inventory_Grid_Manager(IMyCubeBlock entity, ItemStorage.Main_Storage_Class mainStorageClass,
+        public Inventory_Grid_Manager(ItemStorage.Main_Storage_Class mainStorageClass,
             HashSet<IMyCubeGrid> myCubeGrids, IMyCubeGrid gridOwner)
         {
             Logger.Instance.Log(ClassName, "Started Inventory Grid manager");
@@ -335,7 +335,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             block.OnClosing -= Block_OnClosing;
 
             var myBlock = (IMyTerminalBlock)block;
-            if (Enumerable.Contains(TrashSubtype, myBlock.BlockDefinition.SubtypeId))
+            if (TrashSubtype.Contains(myBlock.BlockDefinition.SubtypeId))
             {
                 TrashSorter.Remove(myBlock as IMyConveyorSorter);
                 return;

@@ -5,10 +5,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
 {
     public abstract class ModBase: IDisposable
     {
-        public string ClassName
-        {
-            get { return GetType().Name; }
-        }
+        public string ClassName => GetType().Name;
 
         public const string Trash = "[TRASH]";
         public const string GuideCall = "[GUIDE]";

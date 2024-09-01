@@ -86,19 +86,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         {
             if (_itemAmount > _itemMaxLimit)
             {
-                if (!wasOverLimitInvoked)
-                {
-                    OnItemOverLimit?.Invoke(ItemId);
-                    wasOverLimitInvoked = true;
-                }
+                if (wasOverLimitInvoked) return;
+
+                OnItemOverLimit?.Invoke(ItemId);
+                wasOverLimitInvoked = true;
             }
             else if (_itemAmount < _itemRequestedLimit)
             {
-                if (wasOverLimitInvoked)
-                {
-                    OnItemBelowLimit?.Invoke(ItemId);
-                    wasOverLimitInvoked = false;
-                }
+                if (!wasOverLimitInvoked) return;
+
+                OnItemBelowLimit?.Invoke(ItemId);
+                wasOverLimitInvoked = false;
             }
             else
             {

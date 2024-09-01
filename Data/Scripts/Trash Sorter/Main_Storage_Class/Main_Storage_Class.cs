@@ -5,7 +5,6 @@ using Sandbox.Definitions;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage;
 using VRage.Game;
-using VRage.Game.ModAPI;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ItemStorage
 {
@@ -33,7 +32,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ItemStorage
         public HashSet<string> ProcessedItemsNames = new HashSet<string>();
         public ObservableDictionary<MyDefinitionId, MyFixedPoint> ItemsDictionary;
 
-        public Main_Storage_Class(IMyCubeBlock entity)
+        public Main_Storage_Class()
         {
             Logger.Instance.Log(ClassName, "Item storage created");
             DefinitionIdToName = new Dictionary<string, MyDefinitionId>();

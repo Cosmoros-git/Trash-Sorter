@@ -15,10 +15,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         public const string Ending = "Logs.txt";
         public bool IsEnabled = true;
 
-        private string FileName
-        {
-            get { return BlockId + "_" + Ending; }
-        }
+        private string FileName => BlockId + "_" + Ending;
 
 
         public Logger(string blockId)
