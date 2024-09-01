@@ -13,12 +13,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         private readonly HashSet<Sandbox.ModAPI.Ingame.MyInventoryItemFilter> myInventory_filter;
         private readonly IMyConveyorSorter _myConveyorSorter;
         private readonly Dictionary<MyDefinitionId, ModFilterItem> _items;
-        private readonly Stopwatch watch = new Stopwatch();
 
         public ModFilterCollection(IMyConveyorSorter myConveyorSorter, Dictionary<MyDefinitionId, ModFilterItem> items)
         {
             _myConveyorSorter = myConveyorSorter;
-            _items = items;
+            _items = items?? new Dictionary<MyDefinitionId, ModFilterItem>();
 
 
             myInventory_filter = new HashSet<Sandbox.ModAPI.Ingame.MyInventoryItemFilter>();
@@ -88,14 +87,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         public void Add_ModFilterItem(ModFilterItem item)
         {
-            ModFilterItem value;
-            if (_items.TryGetValue(item.ItemId, out value))
+           
+            ModFilterItem existingItem;
+            if (_items.TryGetValue(item.ItemId, out existingItem))
             {
-                value.Update_ModFilterItem(item.ItemRequestedLimit, item.ItemMaxLimit);
+                existingItem.Update_ModFilterItem(item.ItemRequestedLimit, item.ItemMaxLimit);
                 item.Dispose();
             }
             else
             {
+                _items[item.ItemId] = item;  // Directly add to the dictionary
                 item.OnItemBelowLimit += Remove_Filter_Item;
                 item.OnItemOverLimit += Add_Filter_Item;
             }
@@ -108,20 +109,22 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private void Update_Sorter_Filter()
         {
-            _myConveyorSorter.SetFilter(Sandbox.ModAPI.Ingame.MyConveyorSorterMode.Whitelist,
-                myInventory_filter.ToList());
+            if (myInventory_filter.Count == 0) return;
+
+            var filterList = myInventory_filter.ToList();  // Convert to list only if necessary
+            _myConveyorSorter.SetFilter(Sandbox.ModAPI.Ingame.MyConveyorSorterMode.Whitelist, filterList);
             _myConveyorSorter.DrainAll = true;
         }
 
         private void Parse_To_Filters()
         {
-            watch.Restart();
             foreach (var modFilterItem in _items.Values)
             {
-                if (modFilterItem.ItemMaxLimit == 0 && modFilterItem.ItemRequestedLimit == 0) return;
-                if (modFilterItem.ItemRequestedLimit < 0)
+                if (modFilterItem.ItemMaxLimit == 0 && modFilterItem.ItemRequestedLimit == 0)
+                    continue;  // Use continue instead of return to process all items
+
+                if (modFilterItem.ItemRequestedLimit < 0 && !myInventory_filter.Contains(modFilterItem.ItemId))
                 {
-                    if (myInventory_filter.Contains(modFilterItem.ItemId)) return;
                     Add_Filter_Item(modFilterItem.ItemId);
                 }
 
@@ -130,9 +133,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
                     Add_Filter_Item(modFilterItem.ItemId);
                 }
             }
-
-            watch.Stop();
-            ModSorterTime.FunctionTimes = +watch.ElapsedMilliseconds;
         }
 
         public override void Dispose()

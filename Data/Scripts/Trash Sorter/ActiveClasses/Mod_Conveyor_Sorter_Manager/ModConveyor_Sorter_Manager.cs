@@ -30,6 +30,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         private readonly ObservableDictionary<MyDefinitionId, MyFixedPoint> Observable_Dictionary_Reference;
         private readonly Inventory_Grid_Manager Inventory_Grid_Manager;
 
+        private TimeSpan debugTime = TimeSpan.Zero;
+        private TimeSpan debugTime2 = TimeSpan.Zero;
+        private TimeSpan debugTime3 = TimeSpan.Zero;
+
         private string Guide_Data;
 
         public ModConveyor_Sorter_Manager(HashSet<IMyConveyorSorter> sorters,
@@ -154,15 +158,24 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             stopwatch.Stop();
             Logger.Instance.LogWarning(ClassName, $"Step 1 of parse took {stopwatch.ElapsedMilliseconds}ms");
             stopwatch.Restart();
+            var TriggerReached = false;
 
             foreach (var line in lines)
             {
                 var trimmedLine = line.Trim();
                 if (string.IsNullOrWhiteSpace(trimmedLine))
                 {
+                    aggregatedData.AppendLine();
+                    continue;
+                }
+
+                if (!TriggerReached)
+                {
+                    if (trimmedLine.Contains("<Trash sorter filter>")) TriggerReached = true;
                     aggregatedData.AppendLine(trimmedLine);
                     continue;
                 }
+
                 // Handle comments
                 if (trimmedLine.StartsWith("//"))
                 {
@@ -176,8 +189,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
             stopwatch.Stop();
             Logger.Instance.LogWarning(ClassName,
-                $"Total time taken to read lines data: {stopwatch.ElapsedMilliseconds}ms or around {stopwatch.ElapsedMilliseconds / lines.Length} per line");
-
+                $"Total time taken to read lines data: {stopwatch.ElapsedMilliseconds}ms or around {stopwatch.ElapsedMilliseconds / lines.Length}ms per line");
+            Logger.Instance.LogWarning(ClassName,
+                $"Total checking for existing item {debugTime.Milliseconds}ms, creating new item {debugTime2.Milliseconds}ms");
+            debugTime = TimeSpan.Zero;
+            debugTime2 = TimeSpan.Zero;
+            debugTime3 = TimeSpan.Zero;
             var result = aggregatedData.ToString();
 
             // Ensure the result is meaningful before setting it
@@ -200,7 +217,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
             aggregatedData.AppendLine(processedLine);
 
-
             if (item == null) return;
 
             modFilterCollection.Add_ModFilterItem(item);
@@ -210,10 +226,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         private string ProcessLine(string trimmedLine, out ModFilterItem filterItem, IMyConveyorSorter sorter)
         {
             // If the line is empty or consists only of whitespace, skip it
-            filterItem = null;
 
+            filterItem = null;
             var parts = trimmedLine.Split(new[] { '|' }, StringSplitOptions.None);
             var firstEntry = parts[0].Trim();
+
 
             MyDefinitionId definitionId;
             if (!Definitions_Reference.TryGetValue(firstEntry, out definitionId))
@@ -222,31 +239,37 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
                     $"// {firstEntry} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
             }
 
-            float requestedAmount = 0;
-            float maxLimitTrigger = 0;
+            double requestedAmount = 0;
+            double maxLimitTrigger = 0;
 
             switch (parts.Length)
             {
                 case 1:
                     break;
                 case 2:
-                    float.TryParse(parts[1].Trim(), out requestedAmount);
+                    double.TryParse(parts[1].Trim(), out requestedAmount);
                     break;
                 case 3:
-                    float.TryParse(parts[1].Trim(), out requestedAmount);
-                    if (!float.TryParse(parts[2].Trim(), out maxLimitTrigger) ||
-                                             maxLimitTrigger < requestedAmount)
+                    double.TryParse(parts[1].Trim(), out requestedAmount);
+                    if (!double.TryParse(parts[2].Trim(), out maxLimitTrigger) ||
+                        maxLimitTrigger <= requestedAmount)
                     {
-                        maxLimitTrigger = requestedAmount + 100;
+                        maxLimitTrigger = requestedAmount + requestedAmount * 0.5;
                     }
+
                     break;
             }
+
+
+            var stopwatch3 = Stopwatch.StartNew();
             // Create filter if request is above or below 0;
             filterItem = requestedAmount == 0
                 ? null
                 : Create_Filter(definitionId, requestedAmount, maxLimitTrigger, sorter);
 
             // Return the line back for custom data.
+            stopwatch3.Stop();
+            debugTime3 += stopwatch3.Elapsed;
             return $"{firstEntry} | {requestedAmount} | {maxLimitTrigger}";
         }
 
@@ -262,30 +285,30 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         }
 
 
-        private ModFilterItem Create_Filter(MyDefinitionId definitionId, float requestedAmount, float maxLimitTrigger,
-            IMyConveyorSorter sorter)
+        private ModFilterItem Create_Filter(MyDefinitionId definitionId, double requestedAmount, double maxLimitTrigger, IMyConveyorSorter sorter)
         {
             // Check if the item already exists
-           
-
             ModFilterItem filterItem;
             if (Sorter_Filter[sorter].ContainsId(definitionId, out filterItem))
             {
-                // If the item exists, update its properties
+                // Update the existing item's properties
                 filterItem.Update_ModFilterItem((MyFixedPoint)requestedAmount, (MyFixedPoint)maxLimitTrigger);
-
-                // Return the updated item
                 return filterItem;
             }
 
-            // If the item doesn't exist, create a new one and add it to the collection
-            var newItem = new ModFilterItem(definitionId, Observable_Dictionary_Reference[definitionId],
+            // Create a new item only if it doesn't exist
+            var newItem = new ModFilterItem(
+                definitionId,
                 (MyFixedPoint)requestedAmount,
-                (MyFixedPoint)maxLimitTrigger, Observable_Dictionary_Reference);
+                (MyFixedPoint)maxLimitTrigger,
+                Observable_Dictionary_Reference
+            );
 
             Sorter_Filter[sorter].Add_ModFilterItem(newItem);
+
             return newItem;
         }
+
 
 
         private void Sorter_OnClose(VRage.ModAPI.IMyEntity obj)

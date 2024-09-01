@@ -56,7 +56,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         public event Action<MyDefinitionId> OnItemOverLimit;
         public event Action<MyDefinitionId> OnItemBelowLimit;
 
-        public ModFilterItem(MyDefinitionId itemId, MyFixedPoint initialAmount, MyFixedPoint requestedLimit,
+        public ModFilterItem(MyDefinitionId itemId, MyFixedPoint requestedLimit,
             MyFixedPoint maxLimit, ObservableDictionary<MyDefinitionId, MyFixedPoint> itemsDictionary)
         {
             if (itemsDictionary == null)
@@ -64,14 +64,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
                 throw new ArgumentNullException(nameof(itemsDictionary), "Items dictionary cannot be null.");
             }
 
-            Logger.Instance.Log(ClassName,
-                $"Creating filter item with name {itemId.SubtypeName}, values {initialAmount},{requestedLimit},{maxLimit}");
+           
             ItemId = itemId;
-            _itemAmount = initialAmount;
+            _itemAmount = itemsDictionary[itemId];
             _itemRequestedLimit = requestedLimit;
             _itemMaxLimit = maxLimit;
             wasOverLimitInvoked = false;
 
+
+            Logger.Instance.Log(ClassName,
+                $"Creating filter item with name {itemId.SubtypeName}, values {_itemAmount},{requestedLimit},{maxLimit}");
             ItemsDictionary = itemsDictionary;
             ItemsDictionary.OnValueChanged += On_Value_Updated;
 
