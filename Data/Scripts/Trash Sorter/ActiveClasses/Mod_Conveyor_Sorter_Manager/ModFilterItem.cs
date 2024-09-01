@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Diagnostics;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
@@ -63,6 +64,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
                 throw new ArgumentNullException(nameof(itemsDictionary), "Items dictionary cannot be null.");
             }
 
+            Logger.Instance.Log(ClassName,
+                $"Creating filter item with name {itemId.SubtypeName}, values {initialAmount},{requestedLimit},{maxLimit}");
             ItemId = itemId;
             _itemAmount = initialAmount;
             _itemRequestedLimit = requestedLimit;
@@ -76,6 +79,19 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         }
 
 
+        public void Update_ModFilterItem(MyFixedPoint itemRequestLimit, MyFixedPoint maxLimit)
+        {
+            if (itemRequestLimit != ItemRequestedLimit)
+            {
+                ItemRequestedLimit = itemRequestLimit;
+            }
+
+            if (maxLimit != ItemMaxLimit)
+            {
+                ItemMaxLimit = maxLimit;
+            }
+        }
+
 
         private void On_Value_Updated(MyDefinitionId myDefinitionId, MyFixedPoint myFixedPoint)
         {
@@ -87,7 +103,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private void ValidateLimits()
         {
-           watch.Restart();
+            watch.Restart();
             if (_itemAmount > _itemMaxLimit)
             {
                 if (wasOverLimitInvoked) return;
@@ -106,14 +122,27 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             {
                 wasOverLimitInvoked = false;
             }
+
             watch.Stop();
-            ModSorterTime.FunctionTimes =+ watch.ElapsedMilliseconds;
+            ModSorterTime.FunctionTimes = +watch.ElapsedMilliseconds;
         }
 
 
         public override void Dispose()
         {
             ItemsDictionary.OnValueChanged -= On_Value_Updated;
+        }
+
+        public override bool Equals(object obj)
+        {
+            var other = obj as ModFilterItem;
+            if (other == null) return false;
+            return !ItemId.Equals(other.ItemId);
+        }
+
+        public override int GetHashCode()
+        {
+            return ItemId.GetHashCode();
         }
     }
 }

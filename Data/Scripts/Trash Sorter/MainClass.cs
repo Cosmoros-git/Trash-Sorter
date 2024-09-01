@@ -363,7 +363,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
                     ModConveyorSorterManager =
-                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass);
+                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass,InventoryGridManager);
                     watch.Stop();
                     Logger.Instance.Log(ClassName, $"Step 3. Time taken {watch.ElapsedMilliseconds}ms");
                     Initialization_Step++;

@@ -22,7 +22,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         public HashSet<IMyCubeGrid> Grids;
         private IMyCubeGrid OwnerGrid;
 
-
+        public event Action<IMyConveyorSorter> OnTrashSorterAdded;
         public HashSet<IMyInventory> Inventories = new HashSet<IMyInventory>();
 
         public HashSet<IMyTerminalBlock> TrashBlocks = new HashSet<IMyTerminalBlock>();
@@ -69,7 +69,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                     if (block.CustomName.Contains(Trash)) return;
                     if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId))
                     {
-                        TrashSorter.Add(block as IMyConveyorSorter);
+                        var sorter = (IMyConveyorSorter)block;
+                        TrashSorter.Add(sorter);
+                        OnTrashSorterAdded?.Invoke(sorter);
                         continue;
                     }
 
@@ -88,7 +90,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
             watch.Stop();
             Logger.Instance.Log(ClassName,
-                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {watch.Elapsed}ms");
+                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {watch.ElapsedMilliseconds}ms");
         }
 
         public void OnAfterSimulation100()
@@ -111,7 +113,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             Add_Inventories_GridMerge(arg1);
             watch.Stop();
             Logger.Instance.LogWarning(ClassName,
-                $"GridMerge Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {watch.Elapsed}ms");
+                $"GridMerge Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {watch.ElapsedMilliseconds}ms");
         }
 
         private void OnGridSplit(MyCubeGrid arg1, MyCubeGrid arg2)
@@ -129,14 +131,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
             watch.Stop();
             Logger.Instance.LogWarning(ClassName,
-                $"GridSplit Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {watch.Elapsed}ms");
+                $"GridSplit Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {watch.ElapsedMilliseconds}ms");
         }
 
         private void Get_Global_Item_Count()
         {
             // Is run at start only
             var watch = Stopwatch.StartNew();
-            Logger.Instance.Log(ClassName, $"Getting global item count");
+            Logger.Instance.Log(ClassName, $"Fetching global item count");
             foreach (var inventory in Inventories)
             {
                 var itemList = ((MyInventory)inventory).GetItems();
@@ -176,10 +178,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
                 // Skip processing if the block's CustomName contains the "Trash" keyword
                 if (block.CustomName.Contains(Trash)) return;
+                if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId)) return;
 
                 // Subscribe to the OnClosing event
                 block.OnClosing -= Block_OnClosing;
-                ((IMyTerminalBlock)block).CustomNameChanged -= Terminal_CustomNameChanged;
+                block.CustomNameChanged -= Terminal_CustomNameChanged;
 
                 // Iterate through all inventories of the block
                 for (var i = 0; i < block.InventoryCount; i++)
@@ -219,7 +222,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
             foreach (var block in blocks)
             {
-                ((IMyTerminalBlock)block).CustomNameChanged -= Terminal_CustomNameChanged;
+                block.CustomNameChanged -= Terminal_CustomNameChanged;
                 if (!Blocks.Contains(block)) continue;
                 Block_OnClosing(block);
             }
@@ -239,12 +242,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
 
             // Trash sorters have inventory, but will not be processed here.
-            if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId)) return;
+            if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId))
+            {
+                TrashSorter.Add((IMyConveyorSorter)obj);
+                OnTrashSorterAdded?.Invoke((IMyConveyorSorter)obj);
+                return;
+            }
+
+            ;
             block.CustomNameChanged += Terminal_CustomNameChanged;
 
             // Skip adding inventories if the block's Name contains the "Trash" keyword
             if (block.CustomName.Contains(Trash)) return;
-
             // Adding all inventories
             Logger.Instance.Log(ClassName, $"Inventory added: {block.DisplayNameText}");
             for (var i = 0; i < block.InventoryCount; i++)
@@ -269,7 +278,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         // Deals with block having trash tag or not.
         private void Terminal_CustomNameChanged(IMyTerminalBlock myTerminalBlock)
         {
-            Logger.Instance.Log(ClassName,$"Block name changed, {myTerminalBlock.CustomName}");
             if (myTerminalBlock.CustomName.IndexOf(Trash, StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 if (TrashBlocks.Contains(myTerminalBlock)) return;
@@ -340,7 +348,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             block.OnClosing -= Block_OnClosing;
 
             var myBlock = (IMyTerminalBlock)block;
-            Logger.Instance.Log(ClassName, $"Block {block.DisplayName} removed.");
             if (TrashSubtype.Contains(myBlock.BlockDefinition.SubtypeId))
             {
                 TrashSorter.Remove(myBlock as IMyConveyorSorter);

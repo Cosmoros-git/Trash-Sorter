@@ -77,12 +77,28 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             item.OnItemOverLimit -= Add_Filter_Item;
         }
 
-        public void Add_Tulip_Filter(ModFilterItem item)
+        public void Add_ModFilterItem(ModFilterItem item)
         {
-            if (!_items.Add(item)) return;
-            item.OnItemBelowLimit += Remove_Filter_Item;
-            item.OnItemOverLimit += Add_Filter_Item;
+            if (item == null) return;
+
+            if (!_items.Add(item))
+            {
+                // Update the existing item
+                foreach (var existingItem in _items.Where(existingItem => existingItem.Equals(item)))
+                {
+                    existingItem.Update_ModFilterItem(item.ItemRequestedLimit,item.ItemMaxLimit);
+                    item.Dispose();// Creating this heavy ass items is really bad.
+                    break;
+                }
+            }
+            else
+            {
+                // Add new item to the HashSet
+                item.OnItemBelowLimit += Remove_Filter_Item;
+                item.OnItemOverLimit += Add_Filter_Item;
+            }
         }
+
 
         private void Update_Sorter_Filter()
         {
