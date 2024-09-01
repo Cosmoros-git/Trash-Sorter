@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Sandbox.Game;
@@ -92,8 +93,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
         public void OnAfterSimulation100()
         {
-            Logger.Instance.LogWarning(ClassName,
-                $"Inventory changes total time taken {elapsedTime}ms in 100 ticks, medium time per tick {elapsedTime / 100} ");
+            if (elapsedTime > 10)
+            {
+                Logger.Instance.LogWarning(ClassName,
+                    $"Inventory changes total time taken {elapsedTime}ms, medium time per tick {elapsedTime / 100} ");
+            }
         }
 
         private void OnGridMerge(MyCubeGrid arg1, MyCubeGrid arg2)
@@ -265,13 +269,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         // Deals with block having trash tag or not.
         private void Terminal_CustomNameChanged(IMyTerminalBlock myTerminalBlock)
         {
-            if (myTerminalBlock.CustomName.Contains(Trash))
+            Logger.Instance.Log(ClassName,$"Block name changed, {myTerminalBlock.CustomName}");
+            if (myTerminalBlock.CustomName.IndexOf(Trash, StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 if (TrashBlocks.Contains(myTerminalBlock)) return;
 
                 var block = (IMyCubeBlock)myTerminalBlock;
                 TrashBlocks.Add(myTerminalBlock);
-
+                Logger.Instance.Log(ClassName, $"Block considered as trash inventory.");
                 for (var i = 0; i < block.InventoryCount; i++)
                 {
                     Remove_Inventory((MyInventory)block.GetInventory(i));
@@ -283,7 +288,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
                 var block = (IMyCubeBlock)myTerminalBlock;
                 TrashBlocks.Remove(myTerminalBlock);
-
+                Logger.Instance.Log(ClassName, $"Block removed from trash inventories.");
                 for (var i = 0; i < block.InventoryCount; i++)
                 {
                     Add_Inventory((MyInventory)block.GetInventory(i));
@@ -335,6 +340,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             block.OnClosing -= Block_OnClosing;
 
             var myBlock = (IMyTerminalBlock)block;
+            Logger.Instance.Log(ClassName, $"Block {block.DisplayName} removed.");
             if (TrashSubtype.Contains(myBlock.BlockDefinition.SubtypeId))
             {
                 TrashSorter.Remove(myBlock as IMyConveyorSorter);

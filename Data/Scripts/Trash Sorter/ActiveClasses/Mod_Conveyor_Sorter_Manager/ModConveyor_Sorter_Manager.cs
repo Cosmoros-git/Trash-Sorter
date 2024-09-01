@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
+using Sandbox.Game.Entities.Cube;
+using Sandbox.ModAPI;
 using Sandbox.ModAPI.Ingame;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
@@ -16,7 +19,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
     {
         // ReSharper disable InconsistentNaming
         public HashSet<IMyConveyorSorter> Trash_Sorters;
-        
+
         public Dictionary<IMyConveyorSorter, ModFilterCollection> Sorter_Filter;
 
         public Dictionary<IMyConveyorSorter, string> Sorters_Custom_Data_Dictionary;
@@ -28,7 +31,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private string Guide_Data;
 
-        public ModConveyor_Sorter_Manager(HashSet<IMyConveyorSorter> sorters, Main_Storage_Class.Main_Storage_Class mainAccess)
+        public ModConveyor_Sorter_Manager(HashSet<IMyConveyorSorter> sorters,
+            Main_Storage_Class.Main_Storage_Class mainAccess)
         {
             var watch = Stopwatch.StartNew();
             Trash_Sorters = sorters;
@@ -36,7 +40,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             Sorter_Filter = new Dictionary<IMyConveyorSorter, ModFilterCollection>();
             Observable_Dictionary_Reference = mainAccess.ItemsDictionary;
             Definitions_Reference = mainAccess.DefinitionIdToName;
-            StopWatch=new Stopwatch();
+            StopWatch = new Stopwatch();
 
 
             SorterInit();
@@ -44,7 +48,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
 
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Initialization took {watch.Elapsed.Milliseconds}ms");
+            Logger.Instance.Log(ClassName,
+                $"Initialization took {watch.Elapsed.Milliseconds}ms, amount of trash sorters {Trash_Sorters.Count}");
         }
 
 
@@ -55,9 +60,29 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
                 Add_Sorter(sorter);
             }
         }
+        private void Create_All_Possible_Entries()
+        {
+            // Called once at init to create a string collection for player use.
+            var stringBuilder = new StringBuilder();
+            const string separator = " | ";
+            var lastType = "";
+            foreach (var name in Definitions_Reference)
+            {
+                if (lastType != name.Value.TypeId.ToString())
+                {
+                    stringBuilder.AppendLine();
+                    stringBuilder.AppendLine($"// {name.Value.TypeId}");
+                    stringBuilder.AppendLine();
+                    lastType = name.Value.TypeId.ToString();
+                }
+                stringBuilder.AppendLine(name.Key + separator + 0 + separator + 0);
+            }
 
+            Guide_Data = stringBuilder.ToString();
+        }
         private void Add_Sorter(IMyConveyorSorter sorter)
         {
+            Logger.Instance.Log(ClassName, $"Sorter added {sorter.CustomName}");
             sorter.OnClose += Sorter_OnClose;
             var terminal = (IMyTerminalBlock)sorter;
             terminal.CustomNameChanged += Terminal_CustomNameChanged;
@@ -70,23 +95,40 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         private void TryApplySorterFilter(IMyConveyorSorter sorter)
         {
             // If CustomData is not empty, parse it
-            if (!string.IsNullOrWhiteSpace(sorter.CustomData))
+            if (string.IsNullOrWhiteSpace(sorter.CustomData)) return;
+
+            string customData;
+            if (!Sorters_Custom_Data_Dictionary.TryGetValue(sorter, out customData) || string.IsNullOrEmpty(customData))
             {
-                Super_Complicated_Parser(sorter.CustomData, sorter);
+                return; // Early exit if the sorter is not found or customData is null/empty
             }
+
+            // If the current customData is the same as the stored data, do nothing
+            if (customData == Sorters_Custom_Data_Dictionary[sorter])
+            {
+                return;
+            }
+
+
+            Super_Complicated_Parser(sorter.CustomData, sorter);
         }
 
 
         private void Super_Complicated_Parser(string customData, IMyConveyorSorter sorter)
         {
+            Logger.Instance.Log(ClassName, $"Parsing sorter data");
             var aggregatedData = new StringBuilder();
-            var lines = customData.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = customData.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
             var valuesReached = false;
             foreach (var line in lines)
             {
                 // Trim any leading or trailing whitespace
                 var trimmedLine = line.Trim();
                 // Skip lines that start with "//"
+                if (trimmedLine == "")
+                {
+                    aggregatedData.AppendLine();
+                }
                 if (trimmedLine.StartsWith("//"))
                 {
                     aggregatedData.AppendLine(trimmedLine);
@@ -119,23 +161,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         private void Terminal_CustomNameChanged(IMyTerminalBlock obj)
         {
             var name = obj.CustomName;
-            if (!name.Contains(GuideCall)) return;
-            obj.CustomName = name.Replace(GuideCall, string.Empty);
+            if (name.IndexOf(GuideCall, StringComparison.OrdinalIgnoreCase) < 0) return;
+
+            Logger.Instance.Log(ClassName, $"Sorter guide detected, {name}");
+            obj.CustomName = Regex.Replace(name, Regex.Escape(GuideCall), string.Empty, RegexOptions.IgnoreCase);
             obj.CustomData = Guide_Data;
+            Sorters_Custom_Data_Dictionary[(IMyConveyorSorter)obj] = obj.CustomData;
         }
 
-        private void Create_All_Possible_Entries()
-        {
-            // Called once at init to create a string collection for player use.
-            var stringBuilder = new StringBuilder();
-            const string separator = " | ";
-            foreach (var name in Definitions_Reference.Keys)
-            {
-                stringBuilder.AppendLine(name + separator + 0 + separator + 0);
-            }
-
-            Guide_Data = stringBuilder.ToString();
-        }
+      
 
         private string ProcessLine(string trimmedLine, IMyConveyorSorter sorter, out ModFilterItem filterItem)
         {
@@ -162,7 +196,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             {
                 // Return a comment if the identifier is not valid
                 filterItem = null;
-                return $"// {firstEntry} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
+                return
+                    $"// {firstEntry} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
             }
 
             // Add the valid identifier to the new line
@@ -229,7 +264,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
         {
             if (ModSorterTime.FunctionTimes > 10)
             {
-                Logger.Instance.LogWarning(ClassName,$"Conveyor sorters processing took {ModSorterTime.FunctionTimes}ms");
+                Logger.Instance.LogWarning(ClassName,
+                    $"Conveyor sorters processing took {ModSorterTime.FunctionTimes}ms");
+            }
+            
+            foreach (var sorter in Sorters_Custom_Data_Dictionary.Keys)
+            {
+                TryApplySorterFilter(sorter);
             }
 
             ModSorterTime.FunctionTimes = 0;

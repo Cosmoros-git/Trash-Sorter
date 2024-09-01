@@ -90,7 +90,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 // If the block was successfully verified, start regular updates
                 MyLog.Default.WriteLine("Trash Sorter startup finished");
                 NeedsUpdate = MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
-
             }
             else
             {
@@ -334,6 +333,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private Main_Storage_Class.Main_Storage_Class _mainStorageClass;
         private Inventory_Grid_Manager InventoryGridManager;
+
         // ReSharper disable once NotAccessedField.Local
         private ModConveyor_Sorter_Manager ModConveyorSorterManager;
 
@@ -362,7 +362,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 2:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
-                    ModConveyorSorterManager = new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass);
+                    ModConveyorSorterManager =
+                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass);
                     watch.Stop();
                     Logger.Instance.Log(ClassName, $"Step 3. Time taken {watch.ElapsedMilliseconds}ms");
                     Initialization_Step++;
@@ -373,9 +374,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         public override void UpdateAfterSimulation100()
         {
             base.UpdateAfterSimulation100();
+            if (Initialization_Step <= 2) return;
+
             InventoryGridManager.OnAfterSimulation100();
             ModConveyorSorterManager.OnAfterSimulation100();
-
         }
     }
 }
