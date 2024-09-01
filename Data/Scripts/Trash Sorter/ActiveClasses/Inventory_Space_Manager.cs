@@ -31,11 +31,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         public HashSet<IMyCubeBlock> Blocks = new HashSet<IMyCubeBlock>();
         private readonly HashSet<MyDefinitionId> ProcessedIds;
 
-        private readonly ItemStorage.Main_Storage_Class _mainsStorageClass;
+        private readonly Main_Storage_Class.Main_Storage_Class _mainsStorageClass;
         private readonly Stopwatch StopWatch = new Stopwatch();
         private float elapsedTime;
 
-        public Inventory_Grid_Manager(ItemStorage.Main_Storage_Class mainStorageClass,
+        public Inventory_Grid_Manager(Main_Storage_Class.Main_Storage_Class mainStorageClass,
             HashSet<IMyCubeGrid> myCubeGrids, IMyCubeGrid gridOwner)
         {
             Logger.Instance.Log(ClassName, "Started Inventory Grid manager");

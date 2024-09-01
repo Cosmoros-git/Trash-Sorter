@@ -6,7 +6,7 @@ using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage;
 using VRage.Game;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ItemStorage
+namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
 {
     public class ObservableDictionary<TKey, TValue> : Dictionary<TKey, TValue>
     {

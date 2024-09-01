@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using Sandbox.ModAPI.Ingame;
+using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage.Game;
 
@@ -8,15 +9,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 {
     internal class ModFilterCollection : ModBase
     {
-        private readonly HashSet<MyInventoryItemFilter> myInventory_filter;
+        private readonly HashSet<Sandbox.ModAPI.Ingame.MyInventoryItemFilter> myInventory_filter;
         private readonly IMyConveyorSorter _myConveyorSorter;
         private HashSet<ModFilterItem> _items;
+        private readonly Stopwatch watch = new Stopwatch();
 
         public ModFilterCollection(IMyConveyorSorter myConveyorSorter, HashSet<ModFilterItem> items)
         {
             _myConveyorSorter = myConveyorSorter;
             _items = items ?? new HashSet<ModFilterItem>();
-            myInventory_filter = new HashSet<MyInventoryItemFilter>();
+            myInventory_filter = new HashSet<Sandbox.ModAPI.Ingame.MyInventoryItemFilter>();
             foreach (var tulip in _items)
             {
                 tulip.OnItemOverLimit += Add_Filter_Item;
@@ -53,7 +55,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         public void Add_Filter_Item(MyDefinitionId definitionId)
         {
-            if (myInventory_filter.Add(new MyInventoryItemFilter(definitionId)))
+            if (myInventory_filter.Add(new Sandbox.ModAPI.Ingame.MyInventoryItemFilter(definitionId)))
             {
                 Update_Sorter_Filter();
             }
@@ -61,7 +63,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         public void Remove_Filter_Item(MyDefinitionId definitionId)
         {
-            if (myInventory_filter.Remove(new MyInventoryItemFilter(definitionId)))
+            if (myInventory_filter.Remove(new Sandbox.ModAPI.Ingame.MyInventoryItemFilter(definitionId)))
             {
                 Update_Sorter_Filter();
             }
@@ -84,12 +86,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private void Update_Sorter_Filter()
         {
-            _myConveyorSorter.SetFilter(MyConveyorSorterMode.Whitelist, myInventory_filter.ToList());
+            _myConveyorSorter.SetFilter(Sandbox.ModAPI.Ingame.MyConveyorSorterMode.Whitelist,
+                myInventory_filter.ToList());
             _myConveyorSorter.DrainAll = true;
         }
 
         private void Parse_To_Filters()
         {
+            watch.Restart();
             foreach (var modFilterItem in _items)
             {
                 if (modFilterItem.ItemMaxLimit == 0 && modFilterItem.ItemRequestedLimit == 0) return;
@@ -104,6 +108,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
                     Add_Filter_Item(modFilterItem.ItemId);
                 }
             }
+
+            watch.Stop();
+            ModSorterTime.FunctionTimes = +watch.ElapsedMilliseconds;
         }
 
         public override void Dispose()
@@ -115,5 +122,4 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             }
         }
     }
-
 }

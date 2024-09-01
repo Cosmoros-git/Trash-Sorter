@@ -1,6 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ItemStorage;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
 using VRage;
 using VRage.Game;
 
@@ -14,6 +15,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private MyFixedPoint _itemAmount;
         private readonly ObservableDictionary<MyDefinitionId, MyFixedPoint> ItemsDictionary;
+        private readonly Stopwatch watch = new Stopwatch();
+
 
         public MyFixedPoint ItemAmount
         {
@@ -84,6 +87,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private void ValidateLimits()
         {
+           watch.Restart();
             if (_itemAmount > _itemMaxLimit)
             {
                 if (wasOverLimitInvoked) return;
@@ -102,6 +106,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             {
                 wasOverLimitInvoked = false;
             }
+            watch.Stop();
+            ModSorterTime.FunctionTimes =+ watch.ElapsedMilliseconds;
         }
 
 

@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Text;
 using Sandbox.ModAPI.Ingame;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ItemStorage;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
 using VRage;
 using VRage.Game;
 using IMyConveyorSorter = Sandbox.ModAPI.IMyConveyorSorter;
@@ -24,10 +24,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
         private readonly Dictionary<string, MyDefinitionId> Definitions_Reference;
         private readonly ObservableDictionary<MyDefinitionId, MyFixedPoint> Observable_Dictionary_Reference;
+        private readonly Stopwatch StopWatch;
 
         private string Guide_Data;
 
-        public ModConveyor_Sorter_Manager(HashSet<IMyConveyorSorter> sorters, ItemStorage.Main_Storage_Class mainAccess)
+        public ModConveyor_Sorter_Manager(HashSet<IMyConveyorSorter> sorters, Main_Storage_Class.Main_Storage_Class mainAccess)
         {
             var watch = Stopwatch.StartNew();
             Trash_Sorters = sorters;
@@ -35,6 +36,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             Sorter_Filter = new Dictionary<IMyConveyorSorter, ModFilterCollection>();
             Observable_Dictionary_Reference = mainAccess.ItemsDictionary;
             Definitions_Reference = mainAccess.DefinitionIdToName;
+            StopWatch=new Stopwatch();
 
 
             SorterInit();
@@ -42,7 +44,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
 
 
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Trash sorters initialization took {watch.Elapsed}ms");
+            Logger.Instance.Log(ClassName, $"Initialization took {watch.Elapsed.Milliseconds}ms");
         }
 
 
@@ -220,6 +222,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             obj.OnClose -= Sorter_OnClose;
             var sorter = (IMyConveyorSorter)obj;
             Trash_Sorters.Remove(sorter);
+        }
+
+
+        public void OnAfterSimulation100()
+        {
+            if (ModSorterTime.FunctionTimes > 10)
+            {
+                Logger.Instance.LogWarning(ClassName,$"Conveyor sorters processing took {ModSorterTime.FunctionTimes}ms");
+            }
+
+            ModSorterTime.FunctionTimes = 0;
         }
     }
 }

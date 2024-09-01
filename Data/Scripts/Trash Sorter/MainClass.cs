@@ -12,7 +12,6 @@ using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sorter_Manager;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ItemStorage;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -73,9 +72,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private int Initialization_Step;
 
         // ReSharper disable once NotAccessedField.Local
-#pragma warning disable IDE0052
         private Logger _logger;
-#pragma warning restore IDE0052
 
         public override void UpdateOnceBeforeFrame()
         {
@@ -335,12 +332,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-        private ItemStorage.Main_Storage_Class _mainStorageClass;
+        private Main_Storage_Class.Main_Storage_Class _mainStorageClass;
         private Inventory_Grid_Manager InventoryGridManager;
         // ReSharper disable once NotAccessedField.Local
-#pragma warning disable IDE0052
         private ModConveyor_Sorter_Manager ModConveyorSorterManager;
-#pragma warning restore IDE0052
 
         public override void UpdateAfterSimulation10()
         {
@@ -350,10 +345,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 0:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    _mainStorageClass = new Main_Storage_Class();
+                    _mainStorageClass = new Main_Storage_Class.Main_Storage_Class();
                     Initialization_Step++;
                     watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Initializing step 1. Time taken {watch}ms");
+                    Logger.Instance.Log(ClassName, $"Step 1. Time taken {watch.ElapsedMilliseconds}ms");
                     break;
 
                 case 1:
@@ -362,14 +357,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     InventoryGridManager = new Inventory_Grid_Manager(_mainStorageClass, connectedGrids, gridOwner);
                     Initialization_Step++;
                     watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Initializing step 1. Time taken {watch}ms");
+                    Logger.Instance.Log(ClassName, $"Step 2. Time taken {watch.ElapsedMilliseconds}ms");
                     break;
                 case 2:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
                     ModConveyorSorterManager = new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass);
                     watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Initializing step 1. Time taken {watch}ms");
+                    Logger.Instance.Log(ClassName, $"Step 3. Time taken {watch.ElapsedMilliseconds}ms");
+                    Initialization_Step++;
                     break;
             }
         }
@@ -378,6 +374,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         {
             base.UpdateAfterSimulation100();
             InventoryGridManager.OnAfterSimulation100();
+            ModConveyorSorterManager.OnAfterSimulation100();
 
         }
     }
