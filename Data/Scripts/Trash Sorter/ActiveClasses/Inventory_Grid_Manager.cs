@@ -377,5 +377,5 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 Block_OnClosing(block);
             }
         }
-    }
+    } // This should be done and deal with most of grid/block operations. 
 }

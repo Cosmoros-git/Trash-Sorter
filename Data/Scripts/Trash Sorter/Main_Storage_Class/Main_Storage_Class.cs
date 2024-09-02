@@ -43,7 +43,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
 
     public class Main_Storage_Class : ModBase
     {
-        public Dictionary<string, MyDefinitionId> DefinitionIdToName;
+        public Dictionary<string, MyDefinitionId> NameToDefinition;
+        public Dictionary<MyDefinitionId, string> DefinitionToName;
         public HashSet<MyDefinitionId> ProcessedItems = new HashSet<MyDefinitionId>();
         public HashSet<string> ProcessedItemsNames = new HashSet<string>();
         public ObservableDictionary<MyDefinitionId, MyFixedPoint> ItemsDictionary;
@@ -52,7 +53,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         public Main_Storage_Class()
         {
             Logger.Instance.Log(ClassName, "Item storage created");
-            DefinitionIdToName = new Dictionary<string, MyDefinitionId>();
+            NameToDefinition = new Dictionary<string, MyDefinitionId>();
             ItemsDictionary = new ObservableDictionary<MyDefinitionId, MyFixedPoint>();
             GetDefinitions();
         }
@@ -134,14 +135,19 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         private void AddToDictionaries(MyDefinitionBase definition)
         {
             var name = definition.DisplayNameText;
-            if (!DefinitionIdToName.ContainsKey(name))
+            if (!NameToDefinition.ContainsKey(name))
             {
-                DefinitionIdToName[name] = definition.Id;
+                NameToDefinition[name] = definition.Id;
             }
 
             if (!ItemsDictionary.ContainsKey(definition.Id))
             {
                 ItemsDictionary[definition.Id] = 0;
+            }
+
+            if (DefinitionToName.ContainsKey(definition.Id))
+            {
+                DefinitionToName[definition.Id] = name;
             }
 
             ProcessedItems.Add(definition.Id);

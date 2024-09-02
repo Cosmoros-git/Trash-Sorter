@@ -44,7 +44,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sort
             Sorters_Custom_Data_Dictionary = new Dictionary<IMyConveyorSorter, string>();
             Sorter_Filter = new Dictionary<IMyConveyorSorter, ModFilterCollection>();
             Observable_Dictionary_Reference = mainAccess.ItemsDictionary;
-            Definitions_Reference = mainAccess.DefinitionIdToName;
+            Definitions_Reference = mainAccess.NameToDefinition;
             Inventory_Grid_Manager = inventoryGridManager;
             inventoryGridManager.OnTrashSorterAdded += Add_Sorter;
 

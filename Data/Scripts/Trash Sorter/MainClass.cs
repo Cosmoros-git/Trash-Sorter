@@ -12,6 +12,7 @@ using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sorter_Manager;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -333,9 +334,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private Main_Storage_Class.Main_Storage_Class _mainStorageClass;
         private Inventory_Grid_Manager InventoryGridManager;
-
-        // ReSharper disable once NotAccessedField.Local
         private ModConveyor_Sorter_Manager ModConveyorSorterManager;
+        private Main_Mod_Filter_Storage MainModFilterStorage;
 
         public override void UpdateAfterSimulation10()
         {
@@ -360,10 +360,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     Logger.Instance.Log(ClassName, $"Step 2. Time taken {watch.ElapsedMilliseconds}ms");
                     break;
                 case 2:
+                    MainModFilterStorage = new Main_Mod_Filter_Storage(_mainStorageClass);
+                   break;
+                case 3:
                     watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
                     ModConveyorSorterManager =
-                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass,InventoryGridManager);
+                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass, InventoryGridManager);
                     watch.Stop();
                     Logger.Instance.Log(ClassName, $"Step 3. Time taken {watch.ElapsedMilliseconds}ms");
                     Initialization_Step++;
