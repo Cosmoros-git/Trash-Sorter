@@ -9,37 +9,49 @@ using VRage.Game;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
 {
-    public class ObservableDictionary<TKey, TValue> : Dictionary<TKey, TValue>
+    public class ObservableDictionary<TKey> : Dictionary<TKey, MyFixedPoint>
     {
-        public event Action<TKey, TValue> OnValueChanged;
+        public event Action<TKey, MyFixedPoint> OnValueChanged;
 
-        public new TValue this[TKey key]
+        public new MyFixedPoint this[TKey key]
         {
             get
             {
                 if (!ContainsKey(key))
                 {
-                    Logger.Instance.LogError("Observable Dictionary",
-                        $"The given key '{key}' was not present in the dictionary.");
+                    Logger.Instance.LogError("Observable Dictionary", $"The given key '{key}' was not present in the dictionary.");
                 }
-
                 return base[key];
             }
             set
             {
-                // Add the key if it doesn't exist
                 if (!ContainsKey(key))
                 {
                     Add(key, value);
                 }
-                else if (!EqualityComparer<TValue>.Default.Equals(base[key], value))
+                else if (!EqualityComparer<MyFixedPoint>.Default.Equals(base[key], value))
                 {
                     base[key] = value;
                     OnValueChanged?.Invoke(key, value);
                 }
             }
         }
+
+        public void UpdateValue(TKey key, MyFixedPoint updateToValue)
+        {
+            if (ContainsKey(key))
+            {
+                var currentValue = base[key];
+                var result = currentValue + updateToValue;
+                this[key] = result; // This will trigger the setter and raise the event
+            }
+            else
+            {
+                this[key] = updateToValue; // Add new key with the provided value
+            }
+        }
     }
+
 
     public class MainStorageClass : ModBase
     {
@@ -47,7 +59,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         public Dictionary<MyDefinitionId, string> DefinitionToName;
         public HashSet<MyDefinitionId> ProcessedItems;
         public HashSet<string> ProcessedItemsNames;
-        public ObservableDictionary<MyDefinitionId, MyFixedPoint> ItemsDictionary;
+        public ObservableDictionary<MyDefinitionId> ItemsDictionary;
 
 
         public MainStorageClass()
@@ -55,7 +67,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
             Logger.Instance.Log(ClassName, "Item storage created");
             DefinitionToName = new Dictionary<MyDefinitionId, string>();
             NameToDefinition = new Dictionary<string, MyDefinitionId>();
-            ItemsDictionary = new ObservableDictionary<MyDefinitionId, MyFixedPoint>();
+            ItemsDictionary = new ObservableDictionary<MyDefinitionId>();
             ProcessedItems = new HashSet<MyDefinitionId>();
             ProcessedItemsNames = new HashSet<string>();
             GetDefinitions();

@@ -11,7 +11,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
     internal class SorterChangeHandler : ModBase
     {
         public Dictionary<MyDefinitionId, SorterLimitManager> FilterDictionary;
-        private readonly ObservableDictionary<MyDefinitionId, MyFixedPoint> itemQuantityDictionary;
+        private readonly ObservableDictionary<MyDefinitionId> itemQuantityDictionary;
 
         public SorterChangeHandler(MainStorageClass mainStorage)
         {

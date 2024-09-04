@@ -327,7 +327,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             var definition = arg2.GetDefinitionId();
             if (ProcessedIds.Contains(definition))
             {
-                _mainsStorageClass.ItemsDictionary[definition] += arg3;
+               _mainsStorageClass.ItemsDictionary.UpdateValue(definition,arg3);
             }
 
             StopWatch.Stop();
@@ -352,7 +352,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             {
                 var id = item.GetDefinitionId();
                 if (!ProcessedIds.Contains(id)) continue;
-                _mainsStorageClass.ItemsDictionary[id] -= item.Amount;
+
+                _mainsStorageClass.ItemsDictionary.UpdateValue(id, -item.Amount);
             }
         }
 

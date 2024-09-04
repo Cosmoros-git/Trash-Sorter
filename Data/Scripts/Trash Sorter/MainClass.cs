@@ -336,7 +336,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private InventoryGridManager inventoryGridManager;
         private ModConveyorSorterManagerV2 modConveyorSorterManager;
         private SorterChangeHandler sorterChangeHandler;
-        private ModConveyorSorterManagerV2 modFilterCollectionV2; // Bad name needs refract
+        private readonly ModConveyorSorterManagerV2 modFilterCollectionV2; // Bad name needs refract
         private TimeSpan totalInitTime;
 
         public override void UpdateAfterSimulation10()
@@ -378,7 +378,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     modConveyorSorterManager =
                         new ModConveyorSorterManagerV2(inventoryGridManager.TrashSorter, mainStorageClass,
                             inventoryGridManager, sorterChangeHandler.FilterDictionary,
-                            mainStorageClass.NameToDefinition);
+                            mainStorageClass.NameToDefinition, mainStorageClass.ItemsDictionary);
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
                     Logger.Instance.Log(ClassName, $"Step 4. Time taken {Watch.ElapsedMilliseconds}ms");

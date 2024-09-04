@@ -16,7 +16,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
     internal class SorterCustomData
     {
         public Dictionary<string, string> ProcessedCustomData;
-        public string RawCustomData;
+        private string _rawCustomData = "";
+
+        public string RawCustomData
+        {
+            get { return _rawCustomData; }
+            set
+            {
+                _rawCustomData = value;
+                CheckSum = ComputeSimpleChecksum(value);
+            }
+        }
+
         public int CheckSum;
 
         public SorterCustomData()
@@ -86,7 +97,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
+            Logger.Instance.Log(ClassName,
+                $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
         }
 
 
@@ -197,8 +209,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         public bool HasCustomDataChanged(IMyConveyorSorter sorter)
         {
             SorterCustomData value;
-            if (!sorterDataDictionary.TryGetValue(sorter, out value)) return false;
-            return SorterCustomData.ComputeSimpleChecksum(sorter.CustomData) == value.CheckSum;
+            if (!sorterDataDictionary.TryGetValue(sorter, out value))
+            {
+                Logger.Instance.Log(ClassName, $"Storage value not found");
+                return true;
+            }
+
+            var checksum = SorterCustomData.ComputeSimpleChecksum(sorter.CustomData);
+            if (checksum == value.CheckSum) return false;
+
+            Logger.Instance.Log(ClassName, $"Checksum of string {checksum} is not equal stored {value.CheckSum}");
+            return true;
         }
 
         public bool IsEmpty(IMyConveyorSorter sorter)

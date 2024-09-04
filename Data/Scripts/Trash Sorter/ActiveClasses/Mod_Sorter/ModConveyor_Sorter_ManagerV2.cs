@@ -4,14 +4,17 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using System.Text;
 using System.Text.RegularExpressions;
-using Sandbox.ModAPI;
+using Sandbox.ModAPI.Ingame;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
 using VRage;
 using VRage.Game;
 using VRageMath;
+using IMyConveyorSorter = Sandbox.ModAPI.IMyConveyorSorter;
+using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 {
@@ -27,6 +30,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         private readonly Dictionary<string, MyDefinitionId>
             Definitions_Reference; // String output - Definition transformer
 
+        private readonly ObservableDictionary<MyDefinitionId> CurrentValuesReference;
+
         private readonly InventoryGridManager InventoryGridManager; // Event link
         private readonly Stopwatch watch = new Stopwatch();
 
@@ -36,12 +41,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         public ModConveyorSorterManagerV2(HashSet<IMyConveyorSorter> sorters,
             MainStorageClass mainAccess, InventoryGridManager inventoryGridManager,
             Dictionary<MyDefinitionId, SorterLimitManager> dictionarySorterLimitsManagers,
-            Dictionary<string, MyDefinitionId> nameToDefinition)
+            Dictionary<string, MyDefinitionId> nameToDefinition,
+            ObservableDictionary<MyDefinitionId> itemsDictionary)
         {
             watch.Start();
             Trash_Sorters = sorters;
             DictionarySorterLimitsManagers = dictionarySorterLimitsManagers;
-
+            CurrentValuesReference = itemsDictionary;
 
             SorterDataStorageRef = new SorterDataStorage(nameToDefinition);
             Definitions_Reference = mainAccess.NameToDefinition;
@@ -64,6 +70,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 Add_Sorter(sorter);
             }
+
         }
 
         private void Create_All_Possible_Entries()
@@ -105,7 +112,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         {
             watch.Restart();
             sorter.OnClose += Sorter_OnClose;
-
+            sorter.SetFilter(MyConveyorSorterMode.Whitelist, new List<MyInventoryItemFilter>());
             sorter.CustomNameChanged += Terminal_CustomNameChanged;
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
             Update_Values(sorter);
@@ -118,11 +125,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         {
             if (string.IsNullOrWhiteSpace(sorter.CustomData) && SorterDataStorageRef.IsEmpty(sorter))
             {
+                Logger.Instance.Log(ClassName,$"String is null {sorter.CustomData}");
                 return;
             }
 
             if (!SorterDataStorageRef.HasCustomDataChanged(sorter))
             {
+                //Logger.Instance.Log(ClassName, $"String have not changed {sorter.CustomData}");
                 return;
             }
 
@@ -170,7 +179,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Updating values taken {watch.ElapsedMilliseconds}");
+            Logger.Instance.Log(ClassName, $"Updating values took {watch.ElapsedMilliseconds}ms, new lines {addedEntries.Count}, removed lines {removedEntries.Count}, changed entries {changedEntries.Count}");
         }
 
 
@@ -188,7 +197,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             double itemRequestAmount = 0;
-            double itemRequestLimit = 0;
+            double itemTriggerAmount = 0;
 
             switch (parts.Length)
             {
@@ -200,10 +209,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     break;
                 case 3:
                     double.TryParse(parts[1].Trim(), out itemRequestAmount);
-                    if (!double.TryParse(parts[2].Trim(), out itemRequestLimit) ||
-                        itemRequestLimit <= itemRequestAmount)
+                    if (!double.TryParse(parts[2].Trim(), out itemTriggerAmount) ||
+                        itemTriggerAmount <= itemRequestAmount)
                     {
-                        itemRequestLimit = itemRequestAmount + itemRequestAmount * 0.5;
+                        itemTriggerAmount = itemRequestAmount + itemRequestAmount * 0.5;
                     }
 
                     if (itemRequestAmount < 0) itemRequestAmount = -1;
@@ -215,20 +224,23 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var itemLimit = new ItemLimit()
             {
                 ItemRequestedAmount = (MyFixedPoint)itemRequestAmount,
-                ItemTriggerAmount = (MyFixedPoint)itemRequestLimit,
+                ItemTriggerAmount = (MyFixedPoint)itemTriggerAmount,
                 OverLimitTrigger = false
             };
             SorterLimitManager limitManager;
             if (!DictionarySorterLimitsManagers.TryGetValue(definitionId, out limitManager))
                 return "This is bad, you better don't see this line.";
 
-            if (itemRequestAmount != 0)
+            if (itemRequestAmount == 0) return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
+
+            MyFixedPoint itemAmountNow;
+            if (CurrentValuesReference.TryGetValue(definitionId, out itemAmountNow))
             {
-                limitManager.RegisterSorter(sorter, itemLimit);
+                limitManager.RegisterSorter(sorter, itemLimit, itemAmountNow);
             }
 
             // Return the line back for custom data.
-            return $"{firstEntry} | {itemRequestAmount} | {itemRequestLimit}";
+            return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
         }
 
         private void ProcessDeletedLine(MyDefinitionId defId, IMyConveyorSorter sorter)
@@ -256,8 +268,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             double itemTriggerAmount;
 
             var parts = combinedValue.Split(new[] { '|' }, StringSplitOptions.None);
-            double.TryParse(parts[1].Trim(), out itemRequestAmount);
-            if (!double.TryParse(parts[2].Trim(), out itemTriggerAmount) ||
+            double.TryParse(parts[0].Trim(), out itemRequestAmount);
+            if (!double.TryParse(parts[1].Trim(), out itemTriggerAmount) ||
                 itemTriggerAmount <= itemRequestAmount)
             {
                 itemTriggerAmount = itemRequestAmount + itemRequestAmount * 0.5;

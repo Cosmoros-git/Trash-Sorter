@@ -25,10 +25,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterItemLimits = new Dictionary<IMyConveyorSorter, ItemLimit>();
         }
 
-        public void RegisterSorter(IMyConveyorSorter sorter, ItemLimit itemLimit)
+        public void RegisterSorter(IMyConveyorSorter sorter, ItemLimit itemLimit, MyFixedPoint currentValue)
         {
             SorterItemLimits[sorter] = itemLimit;
             sorter.OnClosing += Sorter_OnClosing;
+            OnValueChangeInit(sorter, currentValue, itemLimit);
         }
 
         public void UnRegisterSorter(IMyConveyorSorter sorter)
@@ -41,7 +42,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var limits = SorterItemLimits[sorter];
             limits.OverLimitTrigger = false;
             limits.ItemTriggerAmount = itemTriggerAmount;
-            limits.ItemRequestedAmount = itemTriggerAmount;
+            limits.ItemRequestedAmount = ItemRequestedAmount;
         }
 
         private void Sorter_OnClosing(VRage.ModAPI.IMyEntity obj)
@@ -57,16 +58,39 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             if (exceeded)
             {
                 sorter.AddItem(definitionId);
+                Logger.Instance.Log("Handle filter add", $"Item added to filter {definitionId}");
             }
             else
             {
                 sorter.RemoveItem(definitionId);
+                Logger.Instance.Log("Handle filter remove", $"Item removed from filter {definitionId}");
             }
+        }
+
+        private void OnValueChangeInit(IMyConveyorSorter sorter, MyFixedPoint currentValue, ItemLimit itemLimit)
+        {
+            // Logger.Instance.Log(ClassName, $"Item init, current value: {currentValue}, request amount {itemLimit.ItemRequestedAmount}, trigger amount {itemLimit.ItemTriggerAmount}");
+            if (currentValue > itemLimit.ItemTriggerAmount)
+            {
+                if (itemLimit.OverLimitTrigger) return;
+
+                itemLimit.OverLimitTrigger = true;
+                HandleFilterStorageChange(sorter, DefinitionId, true);
+                return;
+            }
+
+            if (currentValue > itemLimit.ItemRequestedAmount) return;
+
+            if (!itemLimit.OverLimitTrigger) return;
+
+            itemLimit.OverLimitTrigger = false;
+            HandleFilterStorageChange(sorter, DefinitionId, false);
         }
 
         public void OnValueChange(MyFixedPoint value)
         {
             watch.Restart();
+            Logger.Instance.Log(ClassName, $"Item changed {DefinitionId.SubtypeName}:{value}");
             foreach (var kvp in SorterItemLimits)
             {
                 var limit = kvp.Value;
@@ -75,7 +99,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 if (value > limit.ItemTriggerAmount)
                 {
                     if (limit.OverLimitTrigger) continue;
-
+                    Logger.Instance.Log(ClassName, $"Item changed over limits");
                     limit.OverLimitTrigger = true;
                     HandleFilterStorageChange(sorter, DefinitionId, false);
                     continue;
