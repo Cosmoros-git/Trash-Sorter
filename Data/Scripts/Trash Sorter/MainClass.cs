@@ -40,7 +40,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
      * Custom Data Change Manager -> Because of event not working as intended this class deals with scanning every object custom data and dealing with it in different ways.
      * Data parser -> Takes the data from the custom data and passes it into more useful type of data.
      *
-     * TODO fix issue with grid splitting/merging 
+     * TODO fix issue with grid splitting/merging
      *
      *
      */
@@ -332,11 +332,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-        private Main_Storage_Class.MainStorageClass mainStorageClass;
+        private MainStorageClass mainStorageClass;
         private InventoryGridManager inventoryGridManager;
         private ModConveyorSorterManagerV2 modConveyorSorterManager;
         private SorterChangeHandler sorterChangeHandler;
         private ModConveyorSorterManagerV2 modFilterCollectionV2; // Bad name needs refract
+        private TimeSpan totalInitTime;
 
         public override void UpdateAfterSimulation10()
         {
@@ -344,36 +345,44 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             switch (Initialization_Step)
             {
                 case 0:
-                    Watch.Start();
+                    Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 1. Creating item storage.");
                     mainStorageClass = new Main_Storage_Class.MainStorageClass();
                     Initialization_Step++;
                     Watch.Stop();
+                    totalInitTime += Watch.Elapsed;
                     Logger.Instance.Log(ClassName, $"Step 1. Time taken {Watch.ElapsedMilliseconds}ms");
                     break;
 
                 case 1:
-                    Watch.Start();
+                    Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
                     inventoryGridManager = new InventoryGridManager(mainStorageClass, connectedGrids, GridOwner);
                     Initialization_Step++;
                     Watch.Stop();
+                    totalInitTime += Watch.Elapsed;
                     Logger.Instance.Log(ClassName, $"Step 2. Time taken {Watch.ElapsedMilliseconds}ms");
                     break;
                 case 2:
-                    Watch.Start();
+                    Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
                     sorterChangeHandler = new SorterChangeHandler(mainStorageClass);
                     Initialization_Step++;
+                    Watch.Stop();
+                    totalInitTime += Watch.Elapsed;
                     Logger.Instance.Log(ClassName, $"Step 3. Time taken {Watch.ElapsedMilliseconds}ms");
                     break;
                 case 3:
-                    Watch.Start();
+                    Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
                     modConveyorSorterManager =
-                        new ModConveyorSorterManagerV2(inventoryGridManager.TrashSorter, mainStorageClass, inventoryGridManager, sorterChangeHandler.FilterDictionary, mainStorageClass.NameToDefinition);
+                        new ModConveyorSorterManagerV2(inventoryGridManager.TrashSorter, mainStorageClass,
+                            inventoryGridManager, sorterChangeHandler.FilterDictionary,
+                            mainStorageClass.NameToDefinition);
                     Watch.Stop();
+                    totalInitTime += Watch.Elapsed;
                     Logger.Instance.Log(ClassName, $"Step 4. Time taken {Watch.ElapsedMilliseconds}ms");
+                    Logger.Instance.Log(ClassName, $"Total init time. Time taken {totalInitTime.Milliseconds}ms");
                     Initialization_Step++;
                     break;
             }

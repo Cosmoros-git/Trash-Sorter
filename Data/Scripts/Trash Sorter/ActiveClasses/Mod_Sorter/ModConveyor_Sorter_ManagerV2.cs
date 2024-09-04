@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -37,7 +38,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             Dictionary<MyDefinitionId, SorterLimitManager> dictionarySorterLimitsManagers,
             Dictionary<string, MyDefinitionId> nameToDefinition)
         {
-            var watch = Stopwatch.StartNew();
+            watch.Start();
             Trash_Sorters = sorters;
             DictionarySorterLimitsManagers = dictionarySorterLimitsManagers;
 
@@ -67,6 +68,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
         private void Create_All_Possible_Entries()
         {
+            watch.Restart();
             // Called once at init to create a string collection for player use.
             var stringBuilder = new StringBuilder(Definitions_Reference.Count * 50); // Estimate initial capacity
             const string separator = " | ";
@@ -94,6 +96,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             Guide_Data = stringBuilder.ToString();
+            watch.Stop();
+            Logger.Instance.Log(ClassName,
+                $"Creating all entries took {watch.Elapsed.Milliseconds}ms, amount of entries sorters {Definitions_Reference.Count}");
         }
 
         private void Add_Sorter(IMyConveyorSorter sorter)
@@ -103,6 +108,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             sorter.CustomNameChanged += Terminal_CustomNameChanged;
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
+            Update_Values(sorter);
             watch.Stop();
             Logger.Instance.Log(ClassName, $"Adding sorter has taken {watch.ElapsedMilliseconds}ms");
         }
@@ -282,7 +288,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             if (name.IndexOf(GuideCall, StringComparison.OrdinalIgnoreCase) < 0) return;
 
             Logger.Instance.Log(ClassName, $"Sorter guide detected, {name}");
-            obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty, RegexOptions.IgnoreCase);
+            obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty,
+                RegexOptions.IgnoreCase);
             obj.CustomData = Guide_Data;
             SorterDataStorageRef.AddOrUpdateSorterRawData((IMyConveyorSorter)obj);
         }
@@ -307,7 +314,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             watch.Stop();
 
-           // Logger.Instance.LogWarning(ClassName,$"Custom data parsing has taken {watch.ElapsedMilliseconds}, SorterLimitManager has taken total {DebugTimeClass.TimeOne.Milliseconds}ms");
+            // Logger.Instance.LogWarning(ClassName,$"Custom data parsing has taken {watch.ElapsedMilliseconds}, SorterLimitManager has taken total {DebugTimeClass.TimeOne.Milliseconds}ms");
             DebugTimeClass.TimeOne = TimeSpan.Zero;
         }
 
