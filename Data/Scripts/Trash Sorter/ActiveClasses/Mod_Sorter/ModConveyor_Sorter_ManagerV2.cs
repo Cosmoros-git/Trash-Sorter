@@ -59,15 +59,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
         private void SorterInit()
         {
-            watch.Restart();
             foreach (var sorter in Trash_Sorters)
             {
                 Add_Sorter(sorter);
-            }
-            watch.Stop();
-            if (watch.ElapsedMilliseconds > 10)
-            {
-                Logger.Instance.LogWarning(ClassName, $"Custom data parsing has taken too much time {watch.ElapsedMilliseconds}");
             }
         }
 
@@ -104,10 +98,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
         private void Add_Sorter(IMyConveyorSorter sorter)
         {
+            watch.Restart();
             sorter.OnClose += Sorter_OnClose;
 
             sorter.CustomNameChanged += Terminal_CustomNameChanged;
-            SorterDataStorageRef.AddOrUpdateSorterData(sorter);
+            SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
+            watch.Stop();
+            Logger.Instance.Log(ClassName, $"Adding sorter has taken {watch.ElapsedMilliseconds}ms");
         }
 
 
@@ -124,12 +121,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             Update_Values(sorter);
-            SorterDataStorageRef.AddOrUpdateSorterData(sorter);
+            SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
         }
 
 
         private void Update_Values(IMyConveyorSorter sorter)
         {
+            Logger.Instance.Log(ClassName, $"Starting values update");
+            watch.Restart();
             List<MyDefinitionId> removedEntries;
             List<string> addedEntries;
             Dictionary<string, string> changedEntries;
@@ -163,6 +162,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     data[index] = newLine;
                 }
             }
+
+            watch.Stop();
+            Logger.Instance.Log(ClassName, $"Updating values taken {watch.ElapsedMilliseconds}");
         }
 
 
@@ -280,9 +282,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             if (name.IndexOf(GuideCall, StringComparison.OrdinalIgnoreCase) < 0) return;
 
             Logger.Instance.Log(ClassName, $"Sorter guide detected, {name}");
-            obj.CustomName = Regex.Replace(name, Regex.Escape(GuideCall), string.Empty, RegexOptions.IgnoreCase);
+            obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty, RegexOptions.IgnoreCase);
             obj.CustomData = Guide_Data;
-            SorterDataStorageRef.AddOrUpdateSorterData((IMyConveyorSorter)obj);
+            SorterDataStorageRef.AddOrUpdateSorterRawData((IMyConveyorSorter)obj);
         }
 
 
@@ -297,11 +299,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
         public void OnAfterSimulation100()
         {
-            
+            watch.Restart();
             foreach (var sorter in Trash_Sorters)
             {
                 Try_Updating_Values(sorter);
             }
+
+            watch.Stop();
+
+           // Logger.Instance.LogWarning(ClassName,$"Custom data parsing has taken {watch.ElapsedMilliseconds}, SorterLimitManager has taken total {DebugTimeClass.TimeOne.Milliseconds}ms");
+            DebugTimeClass.TimeOne = TimeSpan.Zero;
         }
 
         public override void Dispose()

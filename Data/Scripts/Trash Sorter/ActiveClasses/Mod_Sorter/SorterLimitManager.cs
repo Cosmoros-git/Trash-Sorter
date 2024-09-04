@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
@@ -16,6 +17,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
     {
         public Dictionary<IMyConveyorSorter, ItemLimit> SorterItemLimits;
         public readonly MyDefinitionId DefinitionId;
+        private readonly Stopwatch watch = new Stopwatch();
 
         public SorterLimitManager(MyDefinitionId definitionId)
         {
@@ -64,6 +66,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
         public void OnValueChange(MyFixedPoint value)
         {
+            watch.Restart();
             foreach (var kvp in SorterItemLimits)
             {
                 var limit = kvp.Value;
@@ -85,6 +88,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 limit.OverLimitTrigger = false;
                 HandleFilterStorageChange(sorter, DefinitionId, false);
             }
+            watch.Stop();
+            DebugTimeClass.TimeOne = +watch.Elapsed;
         }
 
         public override void Dispose()

@@ -45,16 +45,19 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
     {
         public Dictionary<string, MyDefinitionId> NameToDefinition;
         public Dictionary<MyDefinitionId, string> DefinitionToName;
-        public HashSet<MyDefinitionId> ProcessedItems = new HashSet<MyDefinitionId>();
-        public HashSet<string> ProcessedItemsNames = new HashSet<string>();
+        public HashSet<MyDefinitionId> ProcessedItems;
+        public HashSet<string> ProcessedItemsNames;
         public ObservableDictionary<MyDefinitionId, MyFixedPoint> ItemsDictionary;
 
 
         public MainStorageClass()
         {
             Logger.Instance.Log(ClassName, "Item storage created");
+            DefinitionToName = new Dictionary<MyDefinitionId, string>();
             NameToDefinition = new Dictionary<string, MyDefinitionId>();
             ItemsDictionary = new ObservableDictionary<MyDefinitionId, MyFixedPoint>();
+            ProcessedItems = new HashSet<MyDefinitionId>();
+            ProcessedItemsNames = new HashSet<string>();
             GetDefinitions();
         }
 

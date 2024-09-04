@@ -1,11 +1,13 @@
 ﻿using System;
 using System.CodeDom;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Sandbox.ModAPI;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage.Game;
 using VRage.Library.Collections;
 
@@ -39,12 +41,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
     }
 
-    internal class SorterDataStorage
+    internal class SorterDataStorage : ModBase
     {
         private readonly Dictionary<IMyConveyorSorter, SorterCustomData> sorterDataDictionary =
             new Dictionary<IMyConveyorSorter, SorterCustomData>();
 
         private readonly Dictionary<string, MyDefinitionId> ReferenceIdDictionary;
+        private readonly Stopwatch watch = new Stopwatch();
 
         public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition)
         {
@@ -52,35 +55,45 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
 
 
-        public void AddOrUpdateSorterData(IMyConveyorSorter sorter)
+        public void AddOrUpdateSorterRawData(IMyConveyorSorter sorter)
         {
+            watch.Restart();
             var customData = sorter.CustomData;
-            if (string.IsNullOrEmpty(customData)) return;
-            var value = new SorterCustomData();
 
-            var customDataLines = customData.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            SorterCustomData value;
 
-            // Find the index of the line that contains "<Trash sorter filter>"
-            var startIndex = Array.FindIndex(customDataLines, line => line.Contains("<Trash filter>"));
-
-            if (startIndex >= 0 && startIndex < customDataLines.Length - 1)
+            // Check if the sorter already has a stored entry
+            if (!sorterDataDictionary.TryGetValue(sorter, out value))
             {
-                // Skip the tag itself and take the lines after it
-                var relevantLines = customDataLines.Skip(startIndex + 1).ToList();
-                value.RawCustomData = customData;
+                // If no existing entry, create a new one and initialize it
+                value = new SorterCustomData
+                {
+                    RawCustomData = customData,
+                    ProcessedCustomData = new Dictionary<string, string>() // Always initialize this
+                };
+
+                // Add to the dictionary
+                sorterDataDictionary.Add(sorter, value);
             }
             else
             {
+                // If an entry exists, update the RawCustomData field
                 value.RawCustomData = customData;
-                value.ProcessedCustomData = new Dictionary<string, string>();
+
+                // Optionally, you can reprocess custom data if needed
+                // value.ProcessedCustomData.Clear();
+                // (rebuild ProcessedCustomData if necessary)
             }
 
-            sorterDataDictionary[sorter] = value;
+            watch.Stop();
+            Logger.Instance.Log(ClassName, $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
         }
+
 
         public List<string> TrackChanges(IMyConveyorSorter sorter, out List<MyDefinitionId> removedEntries,
             out List<string> addedEntries, out Dictionary<string, string> changedEntries)
         {
+            watch.Restart();
             removedEntries = new List<MyDefinitionId>();
             addedEntries = new List<string>();
             changedEntries = new Dictionary<string, string>();
@@ -148,12 +161,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             // Identify removed entries (in old but not in new)
             foreach (var entry in oldDataDictionary.Keys)
             {
-                if (!newDataDictionary.ContainsKey(entry))
-                {
-                    MyDefinitionId defId;
-                    if (!ReferenceIdDictionary.TryGetValue(entry, out defId)) continue;
-                    removedEntries.Add(defId);
-                }
+                if (newDataDictionary.ContainsKey(entry)) continue;
+
+                MyDefinitionId defId;
+                if (!ReferenceIdDictionary.TryGetValue(entry, out defId)) continue;
+                removedEntries.Add(defId);
             }
 
             // Identify added entries (in new but not in old)
@@ -161,7 +173,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 if (!oldDataDictionary.ContainsKey(entry))
                 {
-                    addedEntries.Add(entry+" | "+newDataDictionary[entry]);
+                    addedEntries.Add(entry + " | " + newDataDictionary[entry]);
                 }
             }
 
@@ -175,8 +187,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             // Update the stored data and checksum to the new version
-            customDataAccess.ProcessedCustomData = newDataDictionary; 
-
+            customDataAccess.ProcessedCustomData = newDataDictionary;
+            watch.Stop();
+            Logger.Instance.Log(ClassName, $"Tracking changes in custom data taken {watch.ElapsedMilliseconds}");
             return newCustomDataList;
         }
 

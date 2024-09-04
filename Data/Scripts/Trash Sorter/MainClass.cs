@@ -40,7 +40,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
      * Custom Data Change Manager -> Because of event not working as intended this class deals with scanning every object custom data and dealing with it in different ways.
      * Data parser -> Takes the data from the custom data and passes it into more useful type of data.
      *
-     *
+     * TODO fix issue with grid splitting/merging 
      *
      *
      */
@@ -382,7 +382,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         public override void UpdateAfterSimulation100()
         {
             base.UpdateAfterSimulation100();
-            if (Initialization_Step <= 2) return;
+            if (Initialization_Step < 4) return;
 
             inventoryGridManager.OnAfterSimulation100();
             modConveyorSorterManager.OnAfterSimulation100();

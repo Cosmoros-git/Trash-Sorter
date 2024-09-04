@@ -26,6 +26,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             using (var writer = MyAPIGateway.Utilities.WriteFileInWorldStorage(FileName, typeof(Logger)))
             {
                 writer.Write("--------Log start--------");
+                writer.WriteLine();
             }
 
         }
