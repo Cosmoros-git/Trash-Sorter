@@ -11,7 +11,7 @@ using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sorter_Manager;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
@@ -56,8 +56,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private const string ClassName = "Main-Class";
         private readonly HashSet<IMyCubeGrid> connectedGrids = new HashSet<IMyCubeGrid>();
         private IMyCubeBlock block;
-        public static IMyCubeGrid gridOwner;
-        public Stopwatch watch = new Stopwatch();
+        public static IMyCubeGrid GridOwner;
+        public Stopwatch Watch = new Stopwatch();
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
@@ -147,7 +147,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             // If all checks pass, proceed with startup
             _logger = new Logger(block.EntityId.ToString());
             block.OnClosing += Block_OnClosing;
-            gridOwner = block.CubeGrid;
+            GridOwner = block.CubeGrid;
             IsOnline = true; // Mark as online after successful verification
 
             return true;
@@ -157,7 +157,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private void Block_OnClosing(IMyEntity obj)
         {
             obj.OnClosing -= Block_OnClosing;
-            _mainStorageClass.Dispose();
+            mainStorageClass.Dispose();
         }
 
         private bool GridManagement(IMyCubeBlock iMyBlock)
@@ -332,10 +332,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-        private Main_Storage_Class.Main_Storage_Class _mainStorageClass;
-        private Inventory_Grid_Manager InventoryGridManager;
-        private ModConveyor_Sorter_Manager ModConveyorSorterManager;
-        private Main_Mod_Filter_Storage MainModFilterStorage;
+        private Main_Storage_Class.MainStorageClass mainStorageClass;
+        private InventoryGridManager inventoryGridManager;
+        private ModConveyorSorterManagerV2 modConveyorSorterManager;
+        private SorterChangeHandler sorterChangeHandler;
+        private ModConveyorSorterManagerV2 modFilterCollectionV2; // Bad name needs refract
 
         public override void UpdateAfterSimulation10()
         {
@@ -343,32 +344,36 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             switch (Initialization_Step)
             {
                 case 0:
-                    watch.Start();
+                    Watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    _mainStorageClass = new Main_Storage_Class.Main_Storage_Class();
+                    mainStorageClass = new Main_Storage_Class.MainStorageClass();
                     Initialization_Step++;
-                    watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Step 1. Time taken {watch.ElapsedMilliseconds}ms");
+                    Watch.Stop();
+                    Logger.Instance.Log(ClassName, $"Step 1. Time taken {Watch.ElapsedMilliseconds}ms");
                     break;
 
                 case 1:
-                    watch.Start();
+                    Watch.Start();
                     Logger.Instance.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
-                    InventoryGridManager = new Inventory_Grid_Manager(_mainStorageClass, connectedGrids, gridOwner);
+                    inventoryGridManager = new InventoryGridManager(mainStorageClass, connectedGrids, GridOwner);
                     Initialization_Step++;
-                    watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Step 2. Time taken {watch.ElapsedMilliseconds}ms");
+                    Watch.Stop();
+                    Logger.Instance.Log(ClassName, $"Step 2. Time taken {Watch.ElapsedMilliseconds}ms");
                     break;
                 case 2:
-                    MainModFilterStorage = new Main_Mod_Filter_Storage(_mainStorageClass);
-                   break;
+                    Watch.Start();
+                    Logger.Instance.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
+                    sorterChangeHandler = new SorterChangeHandler(mainStorageClass);
+                    Initialization_Step++;
+                    Logger.Instance.Log(ClassName, $"Step 3. Time taken {Watch.ElapsedMilliseconds}ms");
+                    break;
                 case 3:
-                    watch.Start();
-                    Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
-                    ModConveyorSorterManager =
-                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass, InventoryGridManager);
-                    watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Step 3. Time taken {watch.ElapsedMilliseconds}ms");
+                    Watch.Start();
+                    Logger.Instance.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
+                    modConveyorSorterManager =
+                        new ModConveyorSorterManagerV2(inventoryGridManager.TrashSorter, mainStorageClass, inventoryGridManager, sorterChangeHandler.FilterDictionary, mainStorageClass.NameToDefinition);
+                    Watch.Stop();
+                    Logger.Instance.Log(ClassName, $"Step 4. Time taken {Watch.ElapsedMilliseconds}ms");
                     Initialization_Step++;
                     break;
             }
@@ -379,8 +384,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             base.UpdateAfterSimulation100();
             if (Initialization_Step <= 2) return;
 
-            InventoryGridManager.OnAfterSimulation100();
-            ModConveyorSorterManager.OnAfterSimulation100();
+            inventoryGridManager.OnAfterSimulation100();
+            modConveyorSorterManager.OnAfterSimulation100();
         }
     }
 }

@@ -41,7 +41,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         }
     }
 
-    public class Main_Storage_Class : ModBase
+    public class MainStorageClass : ModBase
     {
         public Dictionary<string, MyDefinitionId> NameToDefinition;
         public Dictionary<MyDefinitionId, string> DefinitionToName;
@@ -50,7 +50,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         public ObservableDictionary<MyDefinitionId, MyFixedPoint> ItemsDictionary;
 
 
-        public Main_Storage_Class()
+        public MainStorageClass()
         {
             Logger.Instance.Log(ClassName, "Item storage created");
             NameToDefinition = new Dictionary<string, MyDefinitionId>();
@@ -135,21 +135,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         private void AddToDictionaries(MyDefinitionBase definition)
         {
             var name = definition.DisplayNameText;
-            if (!NameToDefinition.ContainsKey(name))
-            {
-                NameToDefinition[name] = definition.Id;
-            }
 
-            if (!ItemsDictionary.ContainsKey(definition.Id))
-            {
-                ItemsDictionary[definition.Id] = 0;
-            }
-
-            if (DefinitionToName.ContainsKey(definition.Id))
-            {
-                DefinitionToName[definition.Id] = name;
-            }
-
+            NameToDefinition[name.Trim()] = definition.Id;
+            ItemsDictionary[definition.Id] = 0;
+            DefinitionToName[definition.Id] = name;
             ProcessedItems.Add(definition.Id);
             ProcessedItemsNames.Add(name);
         }

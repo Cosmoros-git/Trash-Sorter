@@ -17,7 +17,7 @@ using IMyInventory = VRage.Game.ModAPI.IMyInventory;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 {
-    internal class Inventory_Grid_Manager : ModBase
+    internal class InventoryGridManager : ModBase
     {
         public HashSet<IMyCubeGrid> Grids;
         private IMyCubeGrid OwnerGrid;
@@ -32,11 +32,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         public HashSet<IMyCubeBlock> Blocks = new HashSet<IMyCubeBlock>();
         private readonly HashSet<MyDefinitionId> ProcessedIds;
 
-        private readonly Main_Storage_Class.Main_Storage_Class _mainsStorageClass;
+        private readonly Main_Storage_Class.MainStorageClass _mainsStorageClass;
         private readonly Stopwatch StopWatch = new Stopwatch();
         private float elapsedTime;
 
-        public Inventory_Grid_Manager(Main_Storage_Class.Main_Storage_Class mainStorageClass,
+        public InventoryGridManager(Main_Storage_Class.MainStorageClass mainStorageClass,
             HashSet<IMyCubeGrid> myCubeGrids, IMyCubeGrid gridOwner)
         {
             Logger.Instance.Log(ClassName, "Started Inventory Grid manager");
