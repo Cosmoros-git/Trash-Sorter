@@ -23,22 +23,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterItemLimits = new Dictionary<IMyConveyorSorter, ItemLimit>();
         }
 
-        // Adds a new conveyor sorter with value.
+        // Deals with adding conveyor sorters with values. Empty values never used.
         public void RegisterSorter(IMyConveyorSorter sorter, ItemLimit itemLimit, MyFixedPoint currentValue)
         {
             SorterItemLimits[sorter] = itemLimit;
             sorter.OnClosing += Sorter_OnClosing;
             OnValueChangeInit(sorter, currentValue, itemLimit);
         }
-
-        // Removes limits on specific DefinitionId key, Sorter Key, removed value.
         public void UnRegisterSorter(IMyConveyorSorter sorter)
         {
             SorterItemLimits.Remove(sorter);
         }
-
-
-        // Updates limits on specific DefinitionId key, Sorter Key, removed value.
         public void ChangeLimitsOnSorter(IMyConveyorSorter sorter, MyFixedPoint ItemRequestedAmount,
             MyFixedPoint itemTriggerAmount)
         {
@@ -49,28 +44,24 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             limits.ItemRequestedAmount = ItemRequestedAmount;
         }
 
-
-
-        // Removes events related to sorter and limits data too. Preferably make on close stop event calls.
         private void Sorter_OnClosing(VRage.ModAPI.IMyEntity obj)
         {
             obj.OnClosing -= Sorter_OnClosing;
             SorterItemLimits.Remove((IMyConveyorSorter)obj);
         }
 
-        // Adds removes filters from sorters.
+
+
         private static void HandleFilterStorageChange(IMyConveyorSorter sorter, MyDefinitionId definitionId,
             bool exceeded)
         {
             if (exceeded)
             {
                 sorter.AddItem(definitionId);
-                Logger.Instance.Log("Handle filter add", $"Item added to filter {definitionId}");
             }
             else
             {
                 sorter.RemoveItem(definitionId);
-                Logger.Instance.Log("Handle filter remove", $"Item removed from filter {definitionId}");
             }
         }
 
@@ -105,26 +96,40 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 var limit = kvp.Value;
                 var sorter = kvp.Key;
 
+                // Case 1: Value exceeds the trigger amount, we need to add the item to the filter.
                 if (value > limit.ItemTriggerAmount)
                 {
-                    if (limit.OverLimitTrigger) continue;
-                    //Logger.Instance.Log(ClassName, $"Item changed over limits");
+                    if (limit.OverLimitTrigger)
+                    {
+                        // We have already added this item, so skip further updates.
+                        continue;
+                    }
+
                     limit.OverLimitTrigger = true;
                     HandleFilterStorageChange(sorter, DefinitionId, true);
                     continue;
                 }
 
-                if (value > limit.ItemRequestedAmount) continue;
+                // Case 2: Value is within the requested amount range, no filter change needed.
+                if (value > limit.ItemRequestedAmount)
+                {
+                    // Value is within acceptable limits, skip further updates.
+                    continue;
+                }
 
-                if (!limit.OverLimitTrigger) continue;
-
-                limit.OverLimitTrigger = false;
-                HandleFilterStorageChange(sorter, DefinitionId, false);
+                // Case 3: Value dropped below the requested amount, we need to remove the item from the filter.
+                if (limit.OverLimitTrigger)
+                {
+                    // Reset the flag and remove the item from the filter.
+                    limit.OverLimitTrigger = false;
+                    HandleFilterStorageChange(sorter, DefinitionId, false);
+                }
             }
 
             watch.Stop();
-            DebugTimeClass.TimeOne = +watch.Elapsed;
+            DebugTimeClass.TimeOne = watch.Elapsed;
         }
+
 
         public override void Dispose()
         {

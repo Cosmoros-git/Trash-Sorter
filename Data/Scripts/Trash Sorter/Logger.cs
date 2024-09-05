@@ -7,10 +7,8 @@ using Sandbox.ModAPI;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 {
-    internal class Logger
+    public class Logger
     {
-        public static Logger Instance { get; private set; }
-
         public string BlockId;
         public const string Ending = "Logs.txt";
         public bool IsEnabled = true;
@@ -20,8 +18,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         public Logger(string blockId)
         {
-
-            Instance = this;
             BlockId = blockId;
             using (var writer = MyAPIGateway.Utilities.WriteFileInWorldStorage(FileName, typeof(Logger)))
             {

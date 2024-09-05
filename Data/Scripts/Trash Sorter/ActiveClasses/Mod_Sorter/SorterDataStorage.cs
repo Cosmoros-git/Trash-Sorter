@@ -107,13 +107,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// </summary>
         private readonly Stopwatch watch = new Stopwatch();
 
+        private readonly Logger myLogger;
+
         /// <summary>
         /// Initializes a new instance of the SorterDataStorage class and sets up the reference dictionary.
         /// </summary>
         /// <param name="nameToDefinition">A dictionary mapping names to MyDefinitionId objects.</param>
-        public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition)
+        public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition, Logger MyLogger)
         {
             ReferenceIdDictionary = nameToDefinition;
+            myLogger = MyLogger;
         }
 
         /// <summary>
@@ -147,7 +150,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
+            myLogger.Log(ClassName, $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
         }
 
         /// <summary>
@@ -200,12 +203,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             foreach (var line in newDataSet)
             {
-                if (line.StartsWith("//")) continue;
+                if (line.StartsWith("//")) continue;  // Skip commented lines
                 var parts = line.Split('|').Select(part => part.Trim()).ToArray();
-                var value = parts.Length == 1 ? "0|0" : string.Join(" | ", parts.Skip(1));
-                var key = parts[0];
-                newDataDictionary[key] = value;
+                string keyValue = "";
+                // If there is no separator '|', treat the entire line as the key
+                keyValue = parts.Length <= 1 ? line : parts[0];
+                var value = parts.Length > 1 ? string.Join(" | ", parts.Skip(1)) : "0|0";
+
+                newDataDictionary[keyValue] = value;
             }
+
 
             dataFound = true;
             foreach (var entry in oldDataDictionary.Keys)
@@ -237,7 +244,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             customDataAccess.ProcessedCustomData = newDataDictionary;
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Tracking changes in custom data taken {watch.ElapsedMilliseconds}");
+            myLogger.Log(ClassName, $"Tracking changes in custom data taken {watch.ElapsedMilliseconds}");
             return newCustomDataList;
         }
 
@@ -252,14 +259,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterCustomData value;
             if (!sorterDataDictionary.TryGetValue(sorter, out value))
             {
-                Logger.Instance.Log(ClassName, $"Storage value not found");
+                myLogger.Log(ClassName, $"Storage value not found");
                 return true;
             }
 
             var checksum = SorterCustomData.ComputeSimpleChecksum(sorter.CustomData);
             if (checksum == value.CheckSum) return false;
 
-            Logger.Instance.Log(ClassName, $"Checksum of string {checksum} is not equal stored {value.CheckSum}");
+            myLogger.Log(ClassName, $"Checksum of string {checksum} is not equal stored {value.CheckSum}");
             return true;
         }
 

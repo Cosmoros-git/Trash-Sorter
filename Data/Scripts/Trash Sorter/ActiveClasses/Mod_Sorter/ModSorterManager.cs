@@ -18,7 +18,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
     /// The ModConveyorManager class manages conveyor sorters and their custom data.
     /// It tracks sorters, processes custom data, and updates sorter filters based on changes.
     /// </summary>
-    internal class ModConveyorManager : ModBase
+    internal class ModSorterManager : ModBase
     {
         /// <summary>
         /// Collection of conveyor sorters.
@@ -60,6 +60,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// </summary>
         private string Guide_Data;
 
+        private readonly Logger myLogger;
+
         /// <summary>
         /// Initializes a new instance of the ModConveyorManager class and registers events.
         /// </summary>
@@ -69,17 +71,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorterLimitManagers">Dictionary of sorter limit managers.</param>
         /// <param name="nameToDefinition">Dictionary mapping names to item definitions.</param>
         /// <param name="itemsDictionary">Observable dictionary of item values.</param>
-        public ModConveyorManager(HashSet<IMyConveyorSorter> sorters,
+        public ModSorterManager(HashSet<IMyConveyorSorter> sorters,
             MainItemStorage mainItemAccess, InventoryGridManager inventoryGridManager,
             Dictionary<MyDefinitionId, SorterLimitManager> sorterLimitManagers,
             Dictionary<string, MyDefinitionId> nameToDefinition,
-            ObservableDictionary<MyDefinitionId> itemsDictionary)
+            ObservableDictionary<MyDefinitionId> itemsDictionary, Logger MyLogger)
         {
             watch.Start();
+            myLogger = MyLogger;
             ModSorterCollection = sorters;
             SorterLimitManagers = sorterLimitManagers;
             ItemValuesReference = itemsDictionary;
-            SorterDataStorageRef = new SorterDataStorage(nameToDefinition);
+            SorterDataStorageRef = new SorterDataStorage(nameToDefinition, myLogger);
             ItemNameToDefintionMap = mainItemAccess.NameToDefinitionMap;
             InventoryGridManager = inventoryGridManager;
 
@@ -90,7 +93,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             Create_All_Possible_Entries();
             SorterInit();
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Initialization took {watch.Elapsed.Milliseconds}ms, amount of trash sorters {ModSorterCollection.Count}");
+            myLogger.Log(ClassName,
+                $"Initialization took {watch.Elapsed.Milliseconds}ms, amount of trash sorters {ModSorterCollection.Count}");
         }
 
         // Guide data is made here :)
@@ -115,12 +119,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     stringBuilder.AppendLine();
                     lastType = currentType;
                 }
+
                 stringBuilder.AppendLine($"{name.Key}{separator}0{separator}0");
             }
 
             Guide_Data = stringBuilder.ToString();
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Creating all entries took {watch.Elapsed.Milliseconds}ms, amount of entries sorters {ItemNameToDefintionMap.Count}");
+            myLogger.Log(ClassName,
+                $"Creating all entries took {watch.Elapsed.Milliseconds}ms, amount of entries sorters {ItemNameToDefintionMap.Count}");
         }
 
         /// <summary>
@@ -147,11 +153,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             // Register events to avoid memory leaks
             sorter.OnClose += Sorter_OnClose;
             sorter.CustomNameChanged += Terminal_CustomNameChanged;
+            ModSorterCollection.Add(sorter);
 
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
             Update_Values(sorter);
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Adding sorter has taken {watch.ElapsedMilliseconds}ms");
+            myLogger.Log(ClassName, $"Adding sorter has taken {watch.ElapsedMilliseconds}ms");
         }
 
         /// <summary>
@@ -175,7 +182,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorter">The sorter whose values are updated.</param>
         private void Update_Values(IMyConveyorSorter sorter)
         {
-            Logger.Instance.Log(ClassName, $"Starting values update");
             watch.Restart();
 
             List<MyDefinitionId> removedEntries;
@@ -183,7 +189,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             Dictionary<string, string> changedEntries;
             bool hasFilterTagBeenFound;
 
-            var data = SorterDataStorageRef.TrackChanges(sorter, out removedEntries, out addedEntries, out changedEntries, out hasFilterTagBeenFound);
+            var data = SorterDataStorageRef.TrackChanges(sorter, out removedEntries, out addedEntries,
+                out changedEntries, out hasFilterTagBeenFound);
+            myLogger.Log(ClassName,
+                $"New entries {addedEntries.Count}, removed entries {removedEntries.Count}, changed entries {changedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
 
             if (hasFilterTagBeenFound)
             {
@@ -212,7 +221,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 foreach (var sorterChangedData in changedEntries)
                 {
                     var newLine = ProcessChangedLine(sorterChangedData.Key, sorterChangedData.Value, sorter);
-                    var index = defIdList.FindIndex(defId => string.Equals(defId, sorterChangedData.Key.Trim(), StringComparison.OrdinalIgnoreCase));
+                    var index = defIdList.FindIndex(defId =>
+                        string.Equals(defId, sorterChangedData.Key.Trim(), StringComparison.OrdinalIgnoreCase));
                     if (index != -1) data[index] = newLine;
                 }
             }
@@ -229,7 +239,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
             watch.Stop();
         }
-
 
 
         // Functions to process new/removed/edited lines. TODO MAYBE LOOK INTO OPTIMIZING THIS
@@ -292,6 +301,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             // Return the line back for custom data.
             return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
         }
+
         /// <summary>
         /// Processes the deletion of a line corresponding to a sorter limit. 
         /// It un registers the sorter from the SorterLimitManager associated with the given definition.
@@ -303,7 +313,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(defId, out limitManager))
             {
-                Logger.Instance.LogError(ClassName, "This is bad, you better don't see this line.");
+                myLogger.LogError(ClassName, "This is bad, you better don't see this line.");
                 return;
             }
 
@@ -323,22 +333,34 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             MyDefinitionId definitionId;
             if (!ItemNameToDefintionMap.TryGetValue(defId, out definitionId))
             {
-                return $"// {defId} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
+                return
+                    $"// {defId} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
             }
 
-            double itemRequestAmount;
-            double itemTriggerAmount;
+            double itemRequestAmount = 0;
+            double itemTriggerAmount = 0;
 
             var parts = combinedValue.Split(new[] { '|' }, StringSplitOptions.None);
 
-            double.TryParse(parts[0].Trim(), out itemRequestAmount);
 
-            if (!double.TryParse(parts[1].Trim(), out itemTriggerAmount) || itemTriggerAmount <= itemRequestAmount)
+            if (parts.Length > 0)
             {
-                itemTriggerAmount = itemRequestAmount + itemRequestAmount * 0.75;
+                if (!double.TryParse(parts[0].Trim(), out itemRequestAmount) || itemRequestAmount < 0)
+                {
+                    itemRequestAmount = 0;
+                }
             }
 
-            if (itemRequestAmount < 0) itemRequestAmount = -1;
+            if (parts.Length > 1)
+            {
+                if (!double.TryParse(parts[1].Trim(), out itemTriggerAmount) || itemTriggerAmount <= itemRequestAmount)
+                {
+                    // If parsing fails or trigger amount is less than or equal to request amount,
+                    // default to a calculated value based on itemRequestAmount
+                    itemTriggerAmount = itemRequestAmount + Math.Abs(itemRequestAmount) * 0.75;
+                }
+            }
+
 
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(definitionId, out limitManager))
@@ -352,10 +374,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
             else
             {
-                limitManager.ChangeLimitsOnSorter(sorter, (MyFixedPoint)itemRequestAmount, (MyFixedPoint)itemTriggerAmount);
+                limitManager.ChangeLimitsOnSorter(sorter, (MyFixedPoint)itemRequestAmount,
+                    (MyFixedPoint)itemTriggerAmount);
             }
 
-            Logger.Instance.Log(ClassName, $"Changed line is: {defId} | {itemRequestAmount} | {itemTriggerAmount}");
+            myLogger.Log(ClassName, $"Changed line is: {defId} | {itemRequestAmount} | {itemTriggerAmount}");
             return $"{defId} | {itemRequestAmount} | {itemTriggerAmount}";
         }
 
@@ -370,8 +393,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var name = obj.CustomName;
             if (name.IndexOf(GuideCall, StringComparison.OrdinalIgnoreCase) < 0) return;
 
-            Logger.Instance.Log(ClassName, $"Sorter guide detected, {name}");
-            obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty, RegexOptions.IgnoreCase);
+            myLogger.Log(ClassName, $"Sorter guide detected, {name}");
+            obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty,
+                RegexOptions.IgnoreCase);
             obj.CustomData = Guide_Data;
             SorterDataStorageRef.AddOrUpdateSorterRawData((IMyConveyorSorter)obj);
         }
@@ -418,6 +442,5 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 terminal.CustomNameChanged -= Terminal_CustomNameChanged;
             }
         }
-
     }
 }
