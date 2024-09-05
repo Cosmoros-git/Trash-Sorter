@@ -14,37 +14,47 @@ using VRage.Library.Collections;
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 {
 
-    internal class SorterChangedData
-    {
-        public string DefId;
-        public string CombinedValues;
-        public string OldLine;
-
-        public SorterChangedData(string defId, string combinedValues, string oldLine)
-        {
-            DefId = defId;
-            CombinedValues = combinedValues;
-            OldLine = oldLine;
-        }
-    }
-
+    /// <summary>
+    /// The SorterCustomData class is used to manage and process custom data for a sorter.
+    /// It stores both the raw custom data string and its processed form as a dictionary of key-value pairs.
+    /// The class also maintains a checksum of the raw custom data for comparison purposes.
+    /// </summary>
     internal class SorterCustomData
     {
+        /// <summary>
+        /// Stores processed custom data as a dictionary of key-value pairs.
+        /// The key is a string representing an identifier, and the value is the associated string data.
+        /// </summary>
         public Dictionary<string, string> ProcessedCustomData;
+
+        /// <summary>
+        /// Private backing field for RawCustomData, which stores the raw string of custom data.
+        /// </summary>
         private string _rawCustomData = "";
 
+        /// <summary>
+        /// Gets or sets the raw custom data string. When set, it automatically recalculates the checksum
+        /// using the ComputeSimpleChecksum method.
+        /// </summary>
         public string RawCustomData
         {
             get { return _rawCustomData; }
             set
             {
                 _rawCustomData = value;
-                CheckSum = ComputeSimpleChecksum(value);
+                CheckSum = ComputeSimpleChecksum(value); // Recalculate checksum when data changes
             }
         }
 
+        /// <summary>
+        /// Stores the checksum of the raw custom data. Used to detect changes or compare data integrity.
+        /// </summary>
         public int CheckSum;
 
+        /// <summary>
+        /// Initializes a new instance of the SorterCustomData class, with an empty raw custom data string
+        /// and an initialized checksum.
+        /// </summary>
         public SorterCustomData()
         {
             ProcessedCustomData = new Dictionary<string, string>();
@@ -52,6 +62,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             CheckSum = ComputeSimpleChecksum(RawCustomData);
         }
 
+        /// <summary>
+        /// Computes a simple checksum for a given string. The checksum is calculated by iterating through
+        /// each character in the string and using a hash-like algorithm that multiplies by 31 and adds the
+        /// character's value.
+        /// </summary>
+        /// <param name="data">The string for which the checksum is calculated.</param>
+        /// <returns>An integer representing the checksum of the input string.</returns>
         public static int ComputeSimpleChecksum(string data)
         {
             unchecked // Allow overflow, it wraps around
@@ -67,20 +84,43 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
     }
 
+    /// <summary>
+    /// The SorterDataStorage class handles storing and managing custom data for conveyor sorters.
+    /// It maintains a dictionary of sorters and their associated custom data, tracks changes,
+    /// and verifies if the custom data has been modified since it was last stored.
+    /// </summary>
     internal class SorterDataStorage : ModBase
     {
+        /// <summary>
+        /// Dictionary storing the sorter and its associated custom data (processed and raw).
+        /// </summary>
         private readonly Dictionary<IMyConveyorSorter, SorterCustomData> sorterDataDictionary =
             new Dictionary<IMyConveyorSorter, SorterCustomData>();
 
+        /// <summary>
+        /// Dictionary to reference MyDefinitionId objects by string keys (used for custom data parsing).
+        /// </summary>
         private readonly Dictionary<string, MyDefinitionId> ReferenceIdDictionary;
+
+        /// <summary>
+        /// Stopwatch for tracking execution time of operations.
+        /// </summary>
         private readonly Stopwatch watch = new Stopwatch();
 
+        /// <summary>
+        /// Initializes a new instance of the SorterDataStorage class and sets up the reference dictionary.
+        /// </summary>
+        /// <param name="nameToDefinition">A dictionary mapping names to MyDefinitionId objects.</param>
         public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition)
         {
             ReferenceIdDictionary = nameToDefinition;
         }
 
-
+        /// <summary>
+        /// Adds a new sorter to the storage or updates its raw custom data if already present.
+        /// The operation is timed and logged.
+        /// </summary>
+        /// <param name="sorter">The conveyor sorter object to add or update.</param>
         public void AddOrUpdateSorterRawData(IMyConveyorSorter sorter)
         {
             watch.Restart();
@@ -88,47 +128,48 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             SorterCustomData value;
 
-            // Check if the sorter already has a stored entry
+            // Check if the sorter already exists in the dictionary
             if (!sorterDataDictionary.TryGetValue(sorter, out value))
             {
-                // If no existing entry, create a new one and initialize it
+                // If not, create a new SorterCustomData entry
                 value = new SorterCustomData
                 {
                     RawCustomData = customData,
-                    ProcessedCustomData = new Dictionary<string, string>() // Always initialize this
+                    ProcessedCustomData = new Dictionary<string, string>() // Initialize processed data
                 };
 
-                // Add to the dictionary
                 sorterDataDictionary.Add(sorter, value);
             }
             else
             {
-                // If an entry exists, update the RawCustomData field
+                // Update the RawCustomData of the existing entry
                 value.RawCustomData = customData;
-
-                // Optionally, you can reprocess custom data if needed
-                // value.ProcessedCustomData.Clear();
-                // (rebuild ProcessedCustomData if necessary)
             }
 
             watch.Stop();
-            Logger.Instance.Log(ClassName,
-                $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
+            Logger.Instance.Log(ClassName, $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
         }
 
-
+        /// <summary>
+        /// Tracks changes between the current and previous sorter data. Identifies added, removed, 
+        /// and modified entries, and updates the stored data accordingly.
+        /// </summary>
+        /// <param name="sorter">The conveyor sorter being tracked.</param>
+        /// <param name="removedEntries">List of removed entries.</param>
+        /// <param name="addedEntries">List of added entries.</param>
+        /// <param name="changedEntries">Dictionary of changed entries.</param>
+        /// <param name="dataFound">Returns true if data is found.</param>
+        /// <returns>A list of strings representing the new custom data lines.</returns>
         public List<string> TrackChanges(IMyConveyorSorter sorter, out List<MyDefinitionId> removedEntries,
             out List<string> addedEntries, out Dictionary<string, string> changedEntries, out bool dataFound)
         {
             watch.Restart();
             removedEntries = new List<MyDefinitionId>();
             addedEntries = new List<string>();
-            changedEntries = new Dictionary<string,string>();
+            changedEntries = new Dictionary<string, string>();
             dataFound = false;
 
             var newCustomData = sorter.CustomData;
-
-            // Split custom data into lines
             var newCustomDataList = !string.IsNullOrEmpty(newCustomData)
                 ? new List<string>(newCustomData.Split(new[] { '\r', '\n' }, StringSplitOptions.None))
                 : new List<string>();
@@ -144,60 +185,40 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 return newCustomDataList;
             }
 
-            startIndex += 1; // Skip the tag line itself
+            startIndex += 1;
 
             SorterCustomData customDataAccess;
             if (!sorterDataDictionary.TryGetValue(sorter, out customDataAccess))
             {
-                // If no previous data exists, treat all lines as new
                 dataFound = true;
                 return newCustomDataList;
             }
 
-
-            // Old data set
             var oldDataDictionary = customDataAccess.ProcessedCustomData;
-
-            // Skip lines up to the tag for new data set
             var newDataSet = newCustomDataList.Skip(startIndex).ToList();
-
-            // Dictionaries to hold split and trimmed data
             var newDataDictionary = new Dictionary<string, string>();
 
-            // Fill the newDataDictionary
             foreach (var line in newDataSet)
             {
                 if (line.StartsWith("//")) continue;
-                var value = "";
-                var parts = line.Split('|').Select(part => part.Trim()).ToArray(); // Split and trim each part
-
-                if (parts.Length == 1)
-                {
-                    MyDefinitionId defId;
-                    if (!ReferenceIdDictionary.TryGetValue(parts[0], out defId)) continue;
-                    value = " 0|0";
-                }
-                else
-                {
-                    value = string.Join(" | ", parts.Skip(1)); // The rest is the value
-                }
-
-                var key = parts[0]; // First part is the key (e.g., MyDefinitionID)
-
+                var parts = line.Split('|').Select(part => part.Trim()).ToArray();
+                var value = parts.Length == 1 ? "0|0" : string.Join(" | ", parts.Skip(1));
+                var key = parts[0];
                 newDataDictionary[key] = value;
             }
+
             dataFound = true;
-            // Identify removed entries (in old but not in new)
             foreach (var entry in oldDataDictionary.Keys)
             {
                 if (newDataDictionary.ContainsKey(entry)) continue;
 
                 MyDefinitionId defId;
-                if (!ReferenceIdDictionary.TryGetValue(entry, out defId)) continue;
-                removedEntries.Add(defId);
+                if (ReferenceIdDictionary.TryGetValue(entry, out defId))
+                {
+                    removedEntries.Add(defId);
+                }
             }
 
-            // Identify added entries (in new but not in old)
             foreach (var entry in newDataDictionary.Keys)
             {
                 if (!oldDataDictionary.ContainsKey(entry))
@@ -206,7 +227,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 }
             }
 
-            // Identify changed entries (exists in both but values are different)
             foreach (var entry in oldDataDictionary.Keys)
             {
                 if (newDataDictionary.ContainsKey(entry) && oldDataDictionary[entry] != newDataDictionary[entry])
@@ -215,14 +235,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 }
             }
 
-            // Update the stored data and checksum to the new version
             customDataAccess.ProcessedCustomData = newDataDictionary;
             watch.Stop();
             Logger.Instance.Log(ClassName, $"Tracking changes in custom data taken {watch.ElapsedMilliseconds}");
             return newCustomDataList;
         }
 
-
+        /// <summary>
+        /// Checks if the custom data of the specified sorter has changed by comparing its checksum
+        /// with the stored checksum.
+        /// </summary>
+        /// <param name="sorter">The conveyor sorter being checked.</param>
+        /// <returns>True if the custom data has changed; otherwise, false.</returns>
         public bool HasCustomDataChanged(IMyConveyorSorter sorter)
         {
             SorterCustomData value;
@@ -239,6 +263,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             return true;
         }
 
+        /// <summary>
+        /// Determines if the sorter has no custom data.
+        /// </summary>
+        /// <param name="sorter">The conveyor sorter being checked.</param>
+        /// <returns>True if the sorter's custom data is empty or null; otherwise, false.</returns>
         public bool IsEmpty(IMyConveyorSorter sorter)
         {
             SorterCustomData rawData;
@@ -246,4 +275,5 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                    string.IsNullOrWhiteSpace(rawData?.RawCustomData);
         }
     }
+
 }

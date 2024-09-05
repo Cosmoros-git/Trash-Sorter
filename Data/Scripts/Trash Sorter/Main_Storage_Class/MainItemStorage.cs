@@ -52,7 +52,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
     {
 
         // Commented out dictionaries were just never used.
-        public Dictionary<string, MyDefinitionId> NameToDefinition;
+        public Dictionary<string, MyDefinitionId> NameToDefinitionMap;
 
         //  public Dictionary<MyDefinitionId, string> DefinitionToName;
         public HashSet<MyDefinitionId> ProcessedItems;
@@ -67,7 +67,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         {
             Logger.Instance.Log(ClassName, "Item storage created");
             //DefinitionToName = new Dictionary<MyDefinitionId, string>();
-            NameToDefinition = new Dictionary<string, MyDefinitionId>();
+            NameToDefinitionMap = new Dictionary<string, MyDefinitionId>();
             ItemsDictionary = new ObservableDictionary<MyDefinitionId>();
             ProcessedItems = new HashSet<MyDefinitionId>();
             // ProcessedItemsNames = new HashSet<string>();
@@ -152,7 +152,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         {
             var name = definition.DisplayNameText;
 
-            NameToDefinition[name.Trim()] = definition.Id;
+            NameToDefinitionMap[name.Trim()] = definition.Id;
             ItemsDictionary[definition.Id] = 0;
             // DefinitionToName[definition.Id] = name;
             ProcessedItems.Add(definition.Id);

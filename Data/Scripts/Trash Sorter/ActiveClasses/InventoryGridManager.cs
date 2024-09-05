@@ -19,85 +19,138 @@ using IMyInventory = VRage.Game.ModAPI.IMyInventory;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 {
+    /// <summary>
+    /// The InventoryGridManager class manages grids and inventories, tracks changes in cube grids,
+    /// and handles conveyor sorter events. It is responsible for linking and unlinking events, 
+    /// as well as managing the logic for merging and splitting grids.
+    /// </summary>
     internal class InventoryGridManager : ModBase
     {
-        // Contains the group of grids for removal of events and the owner grid id for merging/splitting logic
-        // TODO FINISH THAT LOGIC. ITS BORKED RN.
-        public HashSet<IMyCubeGrid> Grids;
-        private IMyCubeGrid OwnerGrid;
+        /// <summary>
+        /// Set of cube grids managed by the inventory grid manager. Used for removing events and handling grid logic.
+        /// </summary>
+        public HashSet<IMyCubeGrid> ManagedGrids;
 
-        public event Action<IMyConveyorSorter> OnTrashSorterAdded; // Event for ModConveyorManager to add my modded sorters
+        /// <summary>
+        /// The owner grid used for merging/splitting logic.
+        /// </summary>
+        private IMyCubeGrid _primaryGrid;
 
-        public HashSet<IMyInventory> Inventories = new HashSet<IMyInventory>(); // List of observed inventories to unlink events and logic.
+        /// <summary>
+        /// Event triggered when a modded conveyor sorter is added. 
+        /// Subscribed by the ModConveyorManager.
+        /// </summary>
+        public event Action<IMyConveyorSorter> OnModSorterAdded;
 
-        public HashSet<IMyTerminalBlock> TrashBlocks = new HashSet<IMyTerminalBlock>(); // Trash blocks, stored to manage their states and events.
+        /// <summary>
+        /// Set of observed inventories to manage event unlinks and logic.
+        /// </summary>
+        public HashSet<IMyInventory> Inventories = new HashSet<IMyInventory>();
 
-        public HashSet<IMyConveyorSorter> TrashSorter = new HashSet<IMyConveyorSorter>(); // List of sorters, ngl... its only useful at start, probably deserves to be changed.
+        /// <summary>
+        /// Set of terminal blocks marked as "trash" for tracking their state and managing events.
+        /// </summary>
+        public HashSet<IMyTerminalBlock> TrashBlocks = new HashSet<IMyTerminalBlock>();
 
-        public HashSet<IMyCubeBlock> Blocks = new HashSet<IMyCubeBlock>(); // List of all blocks I have events linked to. For dispose and merge/split purposes.
+        /// <summary>
+        /// Set of trash sorters, primarily used during initialization.
+        /// </summary>
+        public HashSet<IMyConveyorSorter> ModSorters = new HashSet<IMyConveyorSorter>();
 
-        private readonly HashSet<MyDefinitionId> ProcessedIds; // List of Ids for inventory scanner to skip items I don't care.
+        /// <summary>
+        /// Set of cube blocks with linked events, used for managing grid events, dispose logic, and merge/split operations.
+        /// </summary>
+        public HashSet<IMyCubeBlock> TrackedBlocks = new HashSet<IMyCubeBlock>();
 
-        private readonly Main_Storage_Class.MainItemStorage _mainsItemStorage; // Item storage, used for item value updates and storage.
-        private readonly Stopwatch StopWatch = new Stopwatch(); // Debug stopwatch.
-        private float elapsedTime; // To measure time small functions take together.
+        /// <summary>
+        /// Set of processed item IDs to filter out unnecessary items during scanning.
+        /// </summary>
+        private readonly HashSet<MyDefinitionId> ProcessedIds;
 
+        /// <summary>
+        /// Reference to the main item storage, used to update item values and manage stored data.
+        /// </summary>
+        private readonly Main_Storage_Class.MainItemStorage _mainsItemStorage;
+
+        /// <summary>
+        /// Stopwatch for debugging purposes, measuring execution time of certain operations.
+        /// </summary>
+        private readonly Stopwatch ExecutionTimer = new Stopwatch();
+
+        /// <summary>
+        /// Tracks the elapsed time for smaller function executions.
+        /// </summary>
+        private float AccumulatedTime;
+
+        /// <summary>
+        /// Initializes a new instance of the InventoryGridManager class.
+        /// </summary>
+        /// <param name="mainItemStorage">Reference to the main item storage class.</param>
+        /// <param name="managedGrids">Set of cube grids to manage.</param>
+        /// <param name="primaryGrid">The owner grid for the grid manager.</param>
         public InventoryGridManager(Main_Storage_Class.MainItemStorage mainItemStorage,
-            HashSet<IMyCubeGrid> myCubeGrids, IMyCubeGrid gridOwner)
+            HashSet<IMyCubeGrid> managedGrids, IMyCubeGrid primaryGrid)
         {
             Logger.Instance.Log(ClassName, "Started Inventory Grid manager");
-            Grids = myCubeGrids;
-            OwnerGrid = gridOwner;
+            ManagedGrids = managedGrids;
+            _primaryGrid = primaryGrid;
             _mainsItemStorage = mainItemStorage;
             ProcessedIds = mainItemStorage.ProcessedItems;
+
+            // Initialize inventories and global item counts
             Get_All_Inventories();
             Get_Global_Item_Count();
         }
 
-
-        // Get all inventories of relevant blocks, such blocks can be seen in CanUseConveyorSystem
+        /// <summary>
+        /// Retrieves all inventories from the managed grids and registers relevant events.
+        /// It also processes blocks based on their conveyor system capabilities and trash status.
+        /// </summary>
         private void Get_All_Inventories()
         {
-            StopWatch.Restart();
-            Logger.Instance.Log(ClassName, $"Grids to count {Grids.Count}");
-            foreach (var myGrid in Grids)
+            ExecutionTimer.Restart();
+            Logger.Instance.Log(ClassName, $"Grids to count {ManagedGrids.Count}");
+
+            foreach (var myGrid in ManagedGrids)
             {
-                // Get all the fat blocks that are of type IMyTerminalBlock
+                // Get all blocks of type IMyTerminalBlock from the grid
                 var blocks = myGrid.GetFatBlocks<IMyTerminalBlock>();
                 Grid_Add((MyCubeGrid)myGrid);
+
                 foreach (var block in blocks)
                 {
-                    if (Blocks.Contains(block)) return;
+                    if (TrackedBlocks.Contains(block)) return;
 
-                    // Check if the block has any inventories, if none skip
+                    // Skip blocks with no inventories
                     if (block.InventoryCount <= 0) continue;
 
-
+                    // Add block if it can use the conveyor system
                     if (CanUseConveyorSystem(block))
                     {
-                        Blocks.Add(block);
+                        TrackedBlocks.Add(block);
                     }
 
-                    // Skip processing if the block's CustomData contains the "Trash" keyword
-
+                    // If the block is a trash sorter, add to TrashSorter and invoke event
                     if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId))
                     {
                         var sorter = (IMyConveyorSorter)block;
-                        TrashSorter.Add(sorter);
-                        OnTrashSorterAdded?.Invoke(sorter);
+                        ModSorters.Add(sorter);
+                        OnModSorterAdded?.Invoke(sorter);
                         continue;
                     }
 
-                    // Subscribe to the events
+                    // Subscribe to block events
                     block.OnClosing += Block_OnClosing;
                     block.CustomNameChanged += Terminal_CustomNameChanged;
+
+                    // Check if block is a trash inventory
                     if (IsTrashInventory(block))
                     {
                         TrashBlocks.Add(block);
                         continue;
                     }
 
-                    // Iterate through all inventories of the block
+                    // Add inventories from the block
                     for (var i = 0; i < block.InventoryCount; i++)
                     {
                         Add_Inventory((MyInventory)block.GetInventory(i));
@@ -105,12 +158,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 }
             }
 
-            StopWatch.Stop();
-            Logger.Instance.Log(ClassName,
-                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {StopWatch.ElapsedMilliseconds}ms, block count {Blocks.Count}, trash inventories {TrashBlocks.Count}");
+            ExecutionTimer.Stop();
+            Logger.Instance.Log(ClassName, $"Finished counting inventories, total inventories {Inventories.Count}, time taken {ExecutionTimer.ElapsedMilliseconds}ms, block count {TrackedBlocks.Count}, trash inventories {TrashBlocks.Count}");
         }
 
-        // List of Interfaces I check for to get inventories. These are all that implement conveyor logic, sadly myConveyorEndPoint is not whitelisted. So I have this.
+        /// <summary>
+        /// Checks whether a block can use the conveyor system by verifying if it is one of the relevant block types.
+        /// </summary>
+        /// <param name="block">The terminal block being checked.</param>
+        /// <returns>True if the block supports the conveyor system; otherwise, false.</returns>
         private static bool CanUseConveyorSystem(IMyTerminalBlock block)
         {
             return (block is IMyCargoContainer ||
@@ -127,12 +183,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                     block is IMyPowerProducer);
         }
 
-        // At init scans all items to store them. Uses ProcessedIds as filter.
+
+        /// <summary>
+        /// Scans all managed inventories at initialization and sums up the total item amounts.
+        /// It uses the ProcessedIds to filter which items to track, and updates the item counts in the main item storage.
+        /// </summary>
         private void Get_Global_Item_Count()
         {
-            // Is run at start only
-            StopWatch.Restart();
+            // This method runs once at the start to gather initial item counts.
+            ExecutionTimer.Restart();
             Logger.Instance.Log(ClassName, $"Fetching global item count");
+
             foreach (var inventory in Inventories)
             {
                 var itemList = ((MyInventory)inventory).GetItems();
@@ -142,62 +203,62 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 {
                     var definition = item.GetDefinitionId();
                     if (!ProcessedIds.Contains(definition)) continue;
+
+                    // Increment item count in the main storage dictionary
                     _mainsItemStorage.ItemsDictionary[definition] += item.Amount;
                 }
             }
 
-            StopWatch.Stop();
-            Logger.Instance.Log(ClassName, $"Finished counting items, time taken {StopWatch.ElapsedMilliseconds}ms");
+            ExecutionTimer.Stop();
+            Logger.Instance.Log(ClassName, $"Finished counting items, time taken {ExecutionTimer.ElapsedMilliseconds}ms");
         }
-
-
 
 
         // Pure debug TODO REMOVE ON PUBLISH
         public void OnAfterSimulation100()
         {
-            if (elapsedTime > 100)
+            if (AccumulatedTime > 100)
             {
                 Logger.Instance.LogWarning(ClassName,
-                    $"Inventory changes total time taken {elapsedTime}ms, medium time per tick {elapsedTime / 100} ");
+                    $"Inventory changes total time taken {AccumulatedTime}ms, medium time per tick {AccumulatedTime / 100} ");
             }
 
-            elapsedTime = 0;
+            AccumulatedTime = 0;
         }
 
         // Todo manager logic and just now its broken somewhat. All grid events except close, that one works.
         private void OnGridMerge(MyCubeGrid arg1, MyCubeGrid arg2)
         {
-            StopWatch.Restart();
+            ExecutionTimer.Restart();
 
             // If grid owner is considered the one to be merged set is as main.
-            if (arg2 == OwnerGrid)
+            if (arg2 == _primaryGrid)
             {
-                OwnerGrid = arg1;
+                _primaryGrid = arg1;
             }
 
             Add_Inventories_GridMerge(arg1);
-            StopWatch.Stop();
+            ExecutionTimer.Stop();
             Logger.Instance.LogWarning(ClassName,
-                $"GridMerge Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {StopWatch.ElapsedMilliseconds}ms");
+                $"GridMerge Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {ExecutionTimer.ElapsedMilliseconds}ms");
         }
         private void OnGridSplit(MyCubeGrid arg1, MyCubeGrid arg2)
         {
-            StopWatch.Restart();
-            if (arg1 == OwnerGrid)
+            ExecutionTimer.Restart();
+            if (arg1 == _primaryGrid)
             {
                 FatGrid_OnClosing(arg2);
             }
             else
             {
-                OwnerGrid = arg2;
+                _primaryGrid = arg2;
                 FatGrid_OnClosing(arg1);
             }
 
 
-            StopWatch.Stop();
+            ExecutionTimer.Stop();
             Logger.Instance.LogWarning(ClassName,
-                $"GridSplit Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {StopWatch.ElapsedMilliseconds}ms");
+                $"GridSplit Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {ExecutionTimer.ElapsedMilliseconds}ms");
         }
 
 
@@ -205,12 +266,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private void Add_Inventories_GridMerge(IMyCubeGrid changedMainGrid)
         {
             // Get all the fat blocks that are of type IMyTerminalBlock
-            StopWatch.Restart();
-            changedMainGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(Grids);
+            ExecutionTimer.Restart();
+            changedMainGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(ManagedGrids);
             Get_All_Inventories();
-            StopWatch.Start();
+            ExecutionTimer.Start();
             Logger.Instance.Log(ClassName,
-                $"Grid merge detected, time taken to calculate {StopWatch.ElapsedMilliseconds}");
+                $"Grid merge detected, time taken to calculate {ExecutionTimer.ElapsedMilliseconds}");
         }
 
         // Probably work fine?
@@ -220,7 +281,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             myGrid.OnFatBlockAdded += FatGrid_OnFatBlockAdded;
             myGrid.OnGridSplit += OnGridSplit;
             myGrid.OnGridMerge += OnGridMerge;
-            Grids.Add(myGrid);
+            ManagedGrids.Add(myGrid);
         }
         private void Grid_Remove(MyCubeGrid myGrid)
         {
@@ -228,7 +289,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             myGrid.OnFatBlockAdded -= FatGrid_OnFatBlockAdded;
             myGrid.OnGridSplit -= OnGridSplit;
             myGrid.OnGridMerge -= OnGridMerge;
-            Grids.Remove(myGrid);
+            ManagedGrids.Remove(myGrid);
         }
 
         private void FatGrid_OnClosing(MyEntity obj)
@@ -241,7 +302,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             foreach (var block in blocks)
             {
                 block.CustomNameChanged -= Terminal_CustomNameChanged;
-                if (!Blocks.Contains(block)) continue;
+                if (!TrackedBlocks.Contains(block)) continue;
                 Block_OnClosing(block);
             }
         }
@@ -249,13 +310,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         // Adds inventories or trash sorters when block added to the grid.
         private void FatGrid_OnFatBlockAdded(MyCubeBlock obj)
         {
-            StopWatch.Restart();
+            ExecutionTimer.Restart();
             var block = obj as IMyTerminalBlock;
             if (block == null) return;
 
             // Blocks with no inventory do not matter.
             if (block.InventoryCount <= 0) return;
-            Blocks.Add(block);
+            TrackedBlocks.Add(block);
             // Subscription to crucial for work events.
             block.OnClosing += Block_OnClosing;
 
@@ -263,8 +324,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             // Trash sorters have inventory, but will not be processed here.
             if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId))
             {
-                TrashSorter.Add((IMyConveyorSorter)obj);
-                OnTrashSorterAdded?.Invoke((IMyConveyorSorter)obj);
+                ModSorters.Add((IMyConveyorSorter)obj);
+                OnModSorterAdded?.Invoke((IMyConveyorSorter)obj);
                 return;
             }
 
@@ -279,9 +340,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 Add_Inventory((MyInventory)block.GetInventory(i));
             }
 
-            StopWatch.Stop();
+            ExecutionTimer.Stop();
             Logger.Instance.Log(ClassName,
-                $"Grid inventory added, time taken to calculate {StopWatch.ElapsedMilliseconds}");
+                $"Grid inventory added, time taken to calculate {ExecutionTimer.ElapsedMilliseconds}");
         }
         private void SingleInventoryScan(IMyInventory inventory)
         {
@@ -335,7 +396,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private void InventoryOnInventoryContentChanged(MyInventoryBase arg1, MyPhysicalInventoryItem arg2,
             MyFixedPoint arg3)
         {
-            StopWatch.Restart();
+            ExecutionTimer.Restart();
             var definition = arg2.GetDefinitionId();
             //Logger.Instance.Log(ClassName, $"Changed {definition}, change {arg3}");
             if (ProcessedIds.Contains(definition))
@@ -343,8 +404,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 _mainsItemStorage.ItemsDictionary.UpdateValue(definition, arg3);
             }
 
-            StopWatch.Stop();
-            elapsedTime += StopWatch.ElapsedMilliseconds;
+            ExecutionTimer.Stop();
+            AccumulatedTime += ExecutionTimer.ElapsedMilliseconds;
         }
 
 
@@ -379,7 +440,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             var myBlock = (IMyTerminalBlock)block;
             if (TrashSubtype.Contains(myBlock.BlockDefinition.SubtypeId))
             {
-                TrashSorter.Remove(myBlock as IMyConveyorSorter);
+                ModSorters.Remove(myBlock as IMyConveyorSorter);
                 return;
             }
 
@@ -394,12 +455,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         public override void Dispose()
         {
             base.Dispose();
-            foreach (var grid in Grids)
+            foreach (var grid in ManagedGrids)
             {
                 Grid_Remove((MyCubeGrid)grid);
             }
 
-            foreach (var block in Blocks)
+            foreach (var block in TrackedBlocks)
             {
                 Block_OnClosing(block);
             }

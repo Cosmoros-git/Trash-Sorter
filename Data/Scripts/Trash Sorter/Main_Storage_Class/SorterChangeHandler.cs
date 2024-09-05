@@ -8,40 +8,61 @@ using VRage.Game;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
 {
+    /// <summary>
+    /// The SorterChangeHandler class manages changes in item quantities and updates associated sorter limits. 
+    /// It efficiently tracks item quantities in a dictionary and applies changes to sorter filters with minimal performance impact.
+    /// </summary>
     internal class SorterChangeHandler : ModBase
     {
-        public Dictionary<MyDefinitionId, SorterLimitManager> FilterDictionary;
-        private readonly ObservableDictionary<MyDefinitionId> itemQuantityDictionary;
+        /// <summary>
+        /// Dictionary that maps item definitions to their corresponding SorterLimitManager, which manages the sorting limits for each item.
+        /// </summary>
+        public Dictionary<MyDefinitionId, SorterLimitManager> SorterLimitManagers;
 
-        // This is what makes the freaking mod not be a reason your sim speed dies. It allows for fast and pretty efficient data access with around O(1) speeds. 
+        /// <summary>
+        /// Observable dictionary that tracks the quantity of each item in the system.
+        /// </summary>
+        private readonly ObservableDictionary<MyDefinitionId> ItemQuantities;
+
+        /// <summary>
+        /// Initializes a new instance of the SorterChangeHandler class, setting up the filter dictionary and subscribing to item quantity changes.
+        /// </summary>
+        /// <param name="mainItemStorage">The main item storage that holds the item definitions and quantities.</param>
         public SorterChangeHandler(MainItemStorage mainItemStorage)
         {
-            FilterDictionary = new Dictionary<MyDefinitionId, SorterLimitManager>(mainItemStorage.NameToDefinition.Count);
+            SorterLimitManagers =
+                new Dictionary<MyDefinitionId, SorterLimitManager>(mainItemStorage.NameToDefinitionMap.Count);
 
             foreach (var definitionId in mainItemStorage.ProcessedItems)
             {
-                FilterDictionary[definitionId] = new SorterLimitManager(definitionId);
+                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId);
             }
 
-            itemQuantityDictionary = mainItemStorage.ItemsDictionary;
-            itemQuantityDictionary.OnValueChanged += OnItemQuantityChanged;
+            ItemQuantities = mainItemStorage.ItemsDictionary;
+            ItemQuantities.OnValueChanged += OnItemQuantityChanged;
         }
 
-        // Called when main storage value gets updated. Maybe should be made to happen on AfterSim 1 or 10. Amount of 0 value changes are quite... a bit.
+        /// <summary>
+        /// Called whenever the item quantity changes in the main storage. Updates the corresponding SorterLimitManager.
+        /// </summary>
+        /// <param name="definitionId">The definition ID of the item that has changed.</param>
+        /// <param name="newQuantity">The new quantity of the item.</param>
         private void OnItemQuantityChanged(MyDefinitionId definitionId, MyFixedPoint newQuantity)
         {
-            SorterLimitManager filterItem;
-            if (FilterDictionary.TryGetValue(definitionId, out filterItem))
+            SorterLimitManager sorterLimitManager;
+            if (SorterLimitManagers.TryGetValue(definitionId, out sorterLimitManager))
             {
-                filterItem.OnValueChange(newQuantity);
+                sorterLimitManager.OnValueChange(newQuantity);
             }
         }
 
-        // No memory leak
+        /// <summary>
+        /// Unsubscribes from events and disposes of the object to prevent memory leaks.
+        /// </summary>
         public override void Dispose()
         {
             base.Dispose();
-            itemQuantityDictionary.OnValueChanged -= OnItemQuantityChanged;
+            ItemQuantities.OnValueChanged -= OnItemQuantityChanged;
         }
     }
 }
