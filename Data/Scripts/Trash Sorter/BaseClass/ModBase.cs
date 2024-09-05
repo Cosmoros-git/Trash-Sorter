@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Sandbox.ModAPI;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
 {
@@ -36,7 +37,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
         {
             "Heat",
         };
-
         public virtual void Dispose()
         {
             

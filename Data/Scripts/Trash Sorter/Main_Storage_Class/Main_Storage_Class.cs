@@ -19,8 +19,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
             {
                 if (!ContainsKey(key))
                 {
-                    Logger.Instance.LogError("Observable Dictionary", $"The given key '{key}' was not present in the dictionary.");
+                    Logger.Instance.LogError("Observable Dictionary",
+                        $"The given key '{key}' was not present in the dictionary.");
                 }
+
                 return base[key];
             }
             set
@@ -41,6 +43,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         {
             if (ContainsKey(key))
             {
+                //Logger.Instance.Log("Observable dictionary", $"{key} changed value {updateToValue}");
                 var currentValue = base[key];
                 var result = currentValue + updateToValue;
                 this[key] = result; // This will trigger the setter and raise the event

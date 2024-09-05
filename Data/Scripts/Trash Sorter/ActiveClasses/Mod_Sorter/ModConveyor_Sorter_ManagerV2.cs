@@ -70,7 +70,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 Add_Sorter(sorter);
             }
-
         }
 
         private void Create_All_Possible_Entries()
@@ -81,7 +80,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             const string separator = " | ";
             string lastType = null;
 
-            stringBuilder.AppendLine("\"<Trash filter>\"");
+            stringBuilder.AppendLine("<Trash filter OFF>");
 
             foreach (var name in Definitions_Reference)
             {
@@ -125,7 +124,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         {
             if (string.IsNullOrWhiteSpace(sorter.CustomData) && SorterDataStorageRef.IsEmpty(sorter))
             {
-                Logger.Instance.Log(ClassName,$"String is null {sorter.CustomData}");
+                //Logger.Instance.Log(ClassName,$"String is null {sorter.CustomData}");
                 return;
             }
 
@@ -136,7 +135,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             Update_Values(sorter);
-            SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
         }
 
 
@@ -147,39 +145,87 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             List<MyDefinitionId> removedEntries;
             List<string> addedEntries;
             Dictionary<string, string> changedEntries;
+            bool dataFound;
             var data = SorterDataStorageRef.TrackChanges(sorter,
-                out removedEntries, out addedEntries, out changedEntries);
-
-            // Process and replace removed entries
-            foreach (var line in removedEntries)
+                out removedEntries, out addedEntries, out changedEntries, out dataFound);
+            if (dataFound)
             {
-                ProcessDeletedLine(line, sorter);
-            }
-
-            foreach (var line in addedEntries)
-            {
-                var newLine = ProcessNewLine(line, sorter);
-
-                // Replace the line in 'data'
-                var index = data.IndexOf(line);
-                if (index != -1)
+                // Process and replace removed entries
+                foreach (var line in removedEntries)
                 {
+                    ProcessDeletedLine(line, sorter);
+                }
+
+                foreach (var line in addedEntries)
+                {
+                    var newLine = ProcessNewLine(line, sorter);
+
+                    // Replace the line in 'data'
+                    var index = data.IndexOf(line);
+                    if (index != -1)
+                    {
+                        data[index] = newLine;
+                    }
+                }
+
+                var defIdList = new List<string>();
+
+                if (changedEntries.Count > 0)
+                {
+                    foreach (var stringData in data)
+                    {
+                        // Split the line by '|' and take the first value (position 0)
+                        var defId = stringData.Split(new[] { '|' }, StringSplitOptions.None)[0].Trim();
+
+                        // Add the definition ID (position 0) to the list
+                        defIdList.Add(defId);
+
+                        // Log the defId for debugging purposes
+                        //Logger.Instance.Log(ClassName, $"Adding defId to list: {defId}");
+                    }
+                }
+                foreach (var sorterChangedData in changedEntries)
+                {
+                    var newLine = ProcessChangedLine(sorterChangedData.Key, sorterChangedData.Value, sorter);
+
+                    // Perform case-insensitive comparison and log for debugging
+                    var index = defIdList.FindIndex(defId =>
+                        string.Equals(defId, sorterChangedData.Key.Trim(), StringComparison.OrdinalIgnoreCase)
+                    );
+
+                    if (index == -1)
+                    {
+                        //Logger.Instance.Log(ClassName, $"Failed to find key: {sorterChangedData.Key.Trim()} in defIdList");
+                        continue;
+                    }
+
+                    //Logger.Instance.Log(ClassName, $"Found matching index {index} for key: {sorterChangedData.Key.Trim()}");
+
                     data[index] = newLine;
                 }
             }
 
-            foreach (var kvp in changedEntries)
+            var stringBuilder = new StringBuilder();
+            for (var i = 0; i < data.Count; i++)
             {
-                var newLine = ProcessChangedLine(kvp.Key, kvp.Value, sorter);
-                var index = data.IndexOf(kvp.Key + " | " + kvp.Value);
-                if (index != -1)
+                var line = data[i].Trim(); // Trim to ensure no extra spaces or newlines
+
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                // Append the line
+                stringBuilder.Append(line);
+                // Append newline only if it's not the last line
+                if (i < data.Count - 1)
                 {
-                    data[index] = newLine;
+                    stringBuilder.AppendLine();
                 }
             }
 
+            var newCustomData = stringBuilder.ToString();
+            sorter.CustomData = newCustomData;
+            SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
             watch.Stop();
-            Logger.Instance.Log(ClassName, $"Updating values took {watch.ElapsedMilliseconds}ms, new lines {addedEntries.Count}, removed lines {removedEntries.Count}, changed entries {changedEntries.Count}");
+            //Logger.Instance.Log(ClassName,$"Updating values took {watch.ElapsedMilliseconds}ms, new lines {addedEntries.Count}, removed lines {removedEntries.Count}, changed entries {changedEntries.Count}");
         }
 
 
@@ -268,11 +314,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             double itemTriggerAmount;
 
             var parts = combinedValue.Split(new[] { '|' }, StringSplitOptions.None);
+
             double.TryParse(parts[0].Trim(), out itemRequestAmount);
+
             if (!double.TryParse(parts[1].Trim(), out itemTriggerAmount) ||
                 itemTriggerAmount <= itemRequestAmount)
             {
-                itemTriggerAmount = itemRequestAmount + itemRequestAmount * 0.5;
+                itemTriggerAmount = itemRequestAmount + itemRequestAmount * 0.75;
             }
 
             if (itemRequestAmount < 0) itemRequestAmount = -1;
@@ -290,7 +338,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     (MyFixedPoint)itemTriggerAmount);
             }
 
-
+            Logger.Instance.Log(ClassName, $"Changed line is: {defId} | {itemRequestAmount} | {itemTriggerAmount}");
             return $"{defId} | {itemRequestAmount} | {itemTriggerAmount}";
         }
 
@@ -336,7 +384,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             InventoryGridManager.OnTrashSorterAdded -= Add_Sorter;
             foreach (var sorter in Trash_Sorters.ToList())
             {
-                Sorter_OnClose(sorter);
+                sorter.OnClose -= Sorter_OnClose;
+                var terminal = (IMyTerminalBlock)sorter;
+                terminal.CustomNameChanged += Terminal_CustomNameChanged;
             }
         }
     }

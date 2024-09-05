@@ -13,6 +13,21 @@ using VRage.Library.Collections;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 {
+
+    internal class SorterChangedData
+    {
+        public string DefId;
+        public string CombinedValues;
+        public string OldLine;
+
+        public SorterChangedData(string defId, string combinedValues, string oldLine)
+        {
+            DefId = defId;
+            CombinedValues = combinedValues;
+            OldLine = oldLine;
+        }
+    }
+
     internal class SorterCustomData
     {
         public Dictionary<string, string> ProcessedCustomData;
@@ -103,12 +118,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
 
         public List<string> TrackChanges(IMyConveyorSorter sorter, out List<MyDefinitionId> removedEntries,
-            out List<string> addedEntries, out Dictionary<string, string> changedEntries)
+            out List<string> addedEntries, out Dictionary<string, string> changedEntries, out bool dataFound)
         {
             watch.Restart();
             removedEntries = new List<MyDefinitionId>();
             addedEntries = new List<string>();
-            changedEntries = new Dictionary<string, string>();
+            changedEntries = new Dictionary<string,string>();
+            dataFound = false;
 
             var newCustomData = sorter.CustomData;
 
@@ -121,22 +137,23 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 .Where(line => !string.IsNullOrWhiteSpace(line))
                 .ToList();
 
+            var startIndex = newNonEmptyEntries.FindIndex(line => line.Contains("<Trash filter ON>"));
+            if (startIndex == -1)
+            {
+                dataFound = true;
+                return newCustomDataList;
+            }
+
+            startIndex += 1; // Skip the tag line itself
+
             SorterCustomData customDataAccess;
             if (!sorterDataDictionary.TryGetValue(sorter, out customDataAccess))
             {
                 // If no previous data exists, treat all lines as new
+                dataFound = true;
                 return newCustomDataList;
             }
 
-            var startIndex = newNonEmptyEntries.FindIndex(line => line.Contains("<Trash filter>"));
-            if (startIndex == -1)
-            {
-                startIndex = 0; // Start comparing from the first line
-            }
-            else
-            {
-                startIndex += 1; // Skip the tag line itself
-            }
 
             // Old data set
             var oldDataDictionary = customDataAccess.ProcessedCustomData;
@@ -169,7 +186,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
                 newDataDictionary[key] = value;
             }
-
+            dataFound = true;
             // Identify removed entries (in old but not in new)
             foreach (var entry in oldDataDictionary.Keys)
             {

@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Linq;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
+using Sandbox.Game.Entities.Cube;
+using Sandbox.Game.GameSystems.Conveyors;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage;
@@ -60,23 +62,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 foreach (var block in blocks)
                 {
                     if (Blocks.Contains(block)) return;
-                    // Check if the block has any inventories
+
+                    // Check if the block has any inventories, if none skip
                     if (block.InventoryCount <= 0) continue;
-                    // Add the block to the Blocks list. Just for dispose or checks
 
-                    var productionBlock = block as IMyProductionBlock;
-                    var cargoContainer = block as IMyCargoContainer;
-                    var sorterBlock = block as IMyConveyorSorter;
-                    var connectorBlock = block as IMyShipConnector;
 
-                    // Check if any of the casts were successful (i.e., block is of any one of these types)
-                    if (productionBlock == null && cargoContainer == null && sorterBlock == null &&
-                        connectorBlock == null) continue;
-
-                    Blocks.Add(block);
+                    if (CanUseConveyorSystem(block))
+                    {
+                        Blocks.Add(block);
+                    }
 
                     // Skip processing if the block's CustomData contains the "Trash" keyword
-                    if (block.CustomName.Contains(Trash)) return;
+
                     if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId))
                     {
                         var sorter = (IMyConveyorSorter)block;
@@ -88,29 +85,50 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                     // Subscribe to the events
                     block.OnClosing += Block_OnClosing;
                     block.CustomNameChanged += Terminal_CustomNameChanged;
-
+                    if (IsTrashInventory(block))
+                    {
+                        TrashBlocks.Add(block);
+                        continue;
+                    }
 
                     // Iterate through all inventories of the block
                     for (var i = 0; i < block.InventoryCount; i++)
                     {
-                        Inventories.Add((MyInventory)block.GetInventory(i));
+                        Add_Inventory((MyInventory)block.GetInventory(i));
                     }
-
                 }
             }
 
             StopWatch.Stop();
             Logger.Instance.Log(ClassName,
-                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {StopWatch.ElapsedMilliseconds}ms, block count {Blocks.Count}");
+                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {StopWatch.ElapsedMilliseconds}ms, block count {Blocks.Count}, trash inventories {TrashBlocks.Count}");
+        }
+
+        private static bool CanUseConveyorSystem(IMyTerminalBlock block)
+        {
+            return (block is IMyCargoContainer ||
+                    block is IMyConveyorSorter ||
+                    block is IMyProductionBlock ||
+                    block is IMyShipConnector ||
+                    block is IMyCollector ||
+                    block is IMyShipDrill ||
+                    block is IMyShipGrinder ||
+                    block is IMyShipWelder ||
+                    block is IMyReactor ||
+                    block is IMyGasTank ||
+                    block is IMyGasGenerator ||
+                    block is IMyPowerProducer);
         }
 
         public void OnAfterSimulation100()
         {
-            if (elapsedTime > 10)
+            if (elapsedTime > 100)
             {
                 Logger.Instance.LogWarning(ClassName,
                     $"Inventory changes total time taken {elapsedTime}ms, medium time per tick {elapsedTime / 100} ");
             }
+
+            elapsedTime = 0;
         }
 
         private void OnGridMerge(MyCubeGrid arg1, MyCubeGrid arg2)
@@ -132,13 +150,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             StopWatch.Restart();
             if (arg1 == OwnerGrid)
             {
-                Remove_Inventories_GridSplit(arg2);
+                FatGrid_OnClosing(arg2);
             }
             else
             {
                 OwnerGrid = arg2;
-                Remove_Inventories_GridSplit(arg1);
+                FatGrid_OnClosing(arg1);
             }
+
 
             StopWatch.Stop();
             Logger.Instance.LogWarning(ClassName,
@@ -175,39 +194,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             changedMainGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(Grids);
             Get_All_Inventories();
             StopWatch.Start();
-            Logger.Instance.Log(ClassName, $"Grid merge detected, time taken to calculate {StopWatch.ElapsedMilliseconds}");
-        }
-
-        private void Remove_Inventories_GridSplit(IMyCubeGrid otherGrid)
-        {
-            // Get all the fat blocks that are of type IMyTerminalBlock
-            StopWatch.Restart();
-            Grid_Remove((MyCubeGrid)otherGrid);
-            var blocks = otherGrid.GetFatBlocks<IMyTerminalBlock>();
-            foreach (var block in blocks)
-            {
-                // Check if the block has any inventories
-                if (block.InventoryCount <= 0) continue;
-                // Add the block to the Blocks list
-                Blocks.Remove(block);
-
-                // Skip processing if the block's CustomName contains the "Trash" keyword
-                if (block.CustomName.Contains(Trash)) return;
-                if (Enumerable.Contains(TrashSubtype, block.BlockDefinition.SubtypeId)) return;
-
-                // Subscribe to the OnClosing event
-                block.OnClosing -= Block_OnClosing;
-                block.CustomNameChanged -= Terminal_CustomNameChanged;
-
-                // Iterate through all inventories of the block
-                for (var i = 0; i < block.InventoryCount; i++)
-                {
-                    Inventories.Remove((MyInventory)block.GetInventory(i));
-                    Remove_Inventory((MyInventory)block.GetInventory(i));
-                }
-            }
-            StopWatch.Start();
-            Logger.Instance.Log(ClassName, $"Grid split detected, time taken to calculate {StopWatch.ElapsedMilliseconds}");
+            Logger.Instance.Log(ClassName,
+                $"Grid merge detected, time taken to calculate {StopWatch.ElapsedMilliseconds}");
         }
 
         private void Grid_Add(MyCubeGrid myGrid)
@@ -264,18 +252,21 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 OnTrashSorterAdded?.Invoke((IMyConveyorSorter)obj);
                 return;
             }
+
             block.CustomNameChanged += Terminal_CustomNameChanged;
 
             // Skip adding inventories if the block's Name contains the "Trash" keyword
-            if (block.CustomName.Contains(Trash)) return;
+            if (IsTrashInventory(block)) return;
             // Adding all inventories
             Logger.Instance.Log(ClassName, $"Inventory added: {block.DisplayNameText}");
             for (var i = 0; i < block.InventoryCount; i++)
             {
                 Add_Inventory((MyInventory)block.GetInventory(i));
             }
+
             StopWatch.Stop();
-            Logger.Instance.Log(ClassName, $"Grid inventory added, time taken to calculate {StopWatch.ElapsedMilliseconds}");
+            Logger.Instance.Log(ClassName,
+                $"Grid inventory added, time taken to calculate {StopWatch.ElapsedMilliseconds}");
         }
 
         private void SingleInventoryScan(IMyInventory inventory)
@@ -294,7 +285,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         // Deals with block having trash tag or not.
         private void Terminal_CustomNameChanged(IMyTerminalBlock myTerminalBlock)
         {
-            if (myTerminalBlock.CustomName.IndexOf(Trash, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (IsTrashInventory(myTerminalBlock))
             {
                 if (TrashBlocks.Contains(myTerminalBlock)) return;
 
@@ -320,14 +311,20 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             }
         }
 
+        private static bool IsTrashInventory(IMyTerminalBlock block)
+        {
+            return block.CustomName.IndexOf(Trash, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private void InventoryOnInventoryContentChanged(MyInventoryBase arg1, MyPhysicalInventoryItem arg2,
             MyFixedPoint arg3)
         {
             StopWatch.Restart();
             var definition = arg2.GetDefinitionId();
+            //Logger.Instance.Log(ClassName, $"Changed {definition}, change {arg3}");
             if (ProcessedIds.Contains(definition))
             {
-               _mainsStorageClass.ItemsDictionary.UpdateValue(definition,arg3);
+                _mainsStorageClass.ItemsDictionary.UpdateValue(definition, arg3);
             }
 
             StopWatch.Stop();
@@ -371,7 +368,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 return;
             }
 
-            if (myBlock.CustomName.Contains(Trash)) return;
+            if (IsTrashInventory(myBlock)) return;
 
             ((IMyTerminalBlock)block).CustomNameChanged -= Terminal_CustomNameChanged;
             for (var i = 0; i < block.InventoryCount; i++)

@@ -10,9 +10,6 @@ using VRage.Game;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 {
-
-
-
     internal class SorterLimitManager : ModBase
     {
         public Dictionary<IMyConveyorSorter, ItemLimit> SorterItemLimits;
@@ -37,9 +34,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterItemLimits.Remove(sorter);
         }
 
-        public void ChangeLimitsOnSorter(IMyConveyorSorter sorter, MyFixedPoint ItemRequestedAmount, MyFixedPoint itemTriggerAmount)
+        public void ChangeLimitsOnSorter(IMyConveyorSorter sorter, MyFixedPoint ItemRequestedAmount,
+            MyFixedPoint itemTriggerAmount)
         {
-            var limits = SorterItemLimits[sorter];
+            ItemLimit limits;
+            if (!SorterItemLimits.TryGetValue(sorter, out limits)) return;
             limits.OverLimitTrigger = false;
             limits.ItemTriggerAmount = itemTriggerAmount;
             limits.ItemRequestedAmount = ItemRequestedAmount;
@@ -52,8 +51,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
 
 
-
-        private static void HandleFilterStorageChange(IMyConveyorSorter sorter, MyDefinitionId definitionId, bool exceeded)
+        private static void HandleFilterStorageChange(IMyConveyorSorter sorter, MyDefinitionId definitionId,
+            bool exceeded)
         {
             if (exceeded)
             {
@@ -90,7 +89,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         public void OnValueChange(MyFixedPoint value)
         {
             watch.Restart();
-            Logger.Instance.Log(ClassName, $"Item changed {DefinitionId.SubtypeName}:{value}");
             foreach (var kvp in SorterItemLimits)
             {
                 var limit = kvp.Value;
@@ -99,9 +97,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 if (value > limit.ItemTriggerAmount)
                 {
                     if (limit.OverLimitTrigger) continue;
-                    Logger.Instance.Log(ClassName, $"Item changed over limits");
+                    //Logger.Instance.Log(ClassName, $"Item changed over limits");
                     limit.OverLimitTrigger = true;
-                    HandleFilterStorageChange(sorter, DefinitionId, false);
+                    HandleFilterStorageChange(sorter, DefinitionId, true);
                     continue;
                 }
 
@@ -112,17 +110,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 limit.OverLimitTrigger = false;
                 HandleFilterStorageChange(sorter, DefinitionId, false);
             }
+
             watch.Stop();
             DebugTimeClass.TimeOne = +watch.Elapsed;
         }
 
         public override void Dispose()
         {
-            foreach (var sorter in SorterItemLimits.Keys.ToList()) // Use ToList() to avoid potential modification issues
+            foreach (var sorter in
+                     SorterItemLimits.Keys.ToList()) // Use ToList() to avoid potential modification issues
             {
                 sorter.OnClosing -= Sorter_OnClosing;
             }
         }
     }
-
 }
