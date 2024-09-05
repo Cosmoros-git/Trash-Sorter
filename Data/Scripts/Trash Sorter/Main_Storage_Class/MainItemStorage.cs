@@ -26,57 +26,55 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
                 return base[key];
             }
             set
-            {
-                if (!ContainsKey(key))
-                {
-                    Add(key, value);
-                }
-                else if (!EqualityComparer<MyFixedPoint>.Default.Equals(base[key], value))
-                {
-                    base[key] = value;
-                    OnValueChanged?.Invoke(key, value);
-                }
+            {   // If key is not here already it means it was never needed. Might have broken stuff because of this... 
+                if (!ContainsKey(key)) return;
+
+                if (EqualityComparer<MyFixedPoint>.Default.Equals(base[key], value)) return;
+
+                base[key] = value;
+                OnValueChanged?.Invoke(key, value);
             }
         }
 
         public void UpdateValue(TKey key, MyFixedPoint updateToValue)
         {
-            if (ContainsKey(key))
-            {
-                //Logger.Instance.Log("Observable dictionary", $"{key} changed value {updateToValue}");
-                var currentValue = base[key];
-                var result = currentValue + updateToValue;
-                this[key] = result; // This will trigger the setter and raise the event
-            }
-            else
-            {
-                this[key] = updateToValue; // Add new key with the provided value
-            }
+            if (!ContainsKey(key)) return;
+
+            //Logger.Instance.Log("Observable dictionary", $"{key} changed value {updateToValue}");
+            var currentValue = base[key];
+            var result = currentValue + updateToValue;
+            this[key] = result; // This will trigger the setter and raise the event
         }
     }
 
 
-    public class MainStorageClass : ModBase
+    public class MainItemStorage : ModBase
     {
+
+        // Commented out dictionaries were just never used.
         public Dictionary<string, MyDefinitionId> NameToDefinition;
-        public Dictionary<MyDefinitionId, string> DefinitionToName;
+
+        //  public Dictionary<MyDefinitionId, string> DefinitionToName;
         public HashSet<MyDefinitionId> ProcessedItems;
-        public HashSet<string> ProcessedItemsNames;
+
+        //  public HashSet<string> ProcessedItemsNames;
         public ObservableDictionary<MyDefinitionId> ItemsDictionary;
 
 
-        public MainStorageClass()
+
+        // This is main storage of my values, id references from strings and hash set of ids I do care about.
+        public MainItemStorage()
         {
             Logger.Instance.Log(ClassName, "Item storage created");
-            DefinitionToName = new Dictionary<MyDefinitionId, string>();
+            //DefinitionToName = new Dictionary<MyDefinitionId, string>();
             NameToDefinition = new Dictionary<string, MyDefinitionId>();
             ItemsDictionary = new ObservableDictionary<MyDefinitionId>();
             ProcessedItems = new HashSet<MyDefinitionId>();
-            ProcessedItemsNames = new HashSet<string>();
+            // ProcessedItemsNames = new HashSet<string>();
             GetDefinitions();
         }
 
-
+        // Here I get all definitions that I will observe. Anything not here is ignored. [Guide] tag in trash sorter will give you data.
         public void GetDefinitions()
         {
             Logger.Instance.Log(ClassName, "Getting item definitions");
@@ -156,9 +154,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
 
             NameToDefinition[name.Trim()] = definition.Id;
             ItemsDictionary[definition.Id] = 0;
-            DefinitionToName[definition.Id] = name;
+            // DefinitionToName[definition.Id] = name;
             ProcessedItems.Add(definition.Id);
-            ProcessedItemsNames.Add(name);
+            // ProcessedItemsNames.Add(name);
         }
     }
 }

@@ -146,7 +146,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
             // If all checks pass, proceed with startup
             _logger = new Logger(block.EntityId.ToString());
-            block.OnClosing += Block_OnClosing;
+            block.OnMarkForClose += Block_OnMarkForClose;
             GridOwner = block.CubeGrid;
             IsOnline = true; // Mark as online after successful verification
 
@@ -154,10 +154,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-        private void Block_OnClosing(IMyEntity obj)
+        private void Block_OnMarkForClose(IMyEntity obj)
         {
-            obj.OnClosing -= Block_OnClosing;
-            mainStorageClass.Dispose();
+            // Moved entire dispose into earlier method to be sure it does its job.
+            obj.OnClosing -= Block_OnMarkForClose;
+            _mainItemStorage.Dispose();
         }
 
         private bool GridManagement(IMyCubeBlock iMyBlock)
@@ -257,7 +258,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             IsOtherManagerGone = true;
         }
 
-
         private bool OverrideManagerBlock()
         {
             var myCubeBlock = (IMyCubeBlock)Entity;
@@ -332,13 +332,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-        private MainStorageClass mainStorageClass;
+        // Storing files so GC won't sudo rm rf them.
+        private MainItemStorage _mainItemStorage;
         private InventoryGridManager inventoryGridManager;
-        private ModConveyorSorterManagerV2 modConveyorSorterManager;
+        private ModConveyorManager modConveyorMainManager;
         private SorterChangeHandler sorterChangeHandler;
-        private readonly ModConveyorSorterManagerV2 modFilterCollectionV2; // Bad name needs refract
         private TimeSpan totalInitTime;
 
+
+        // Initializing sequence. So far it takes around 80ms-200ms even on ultra large grids.
         public override void UpdateAfterSimulation10()
         {
             base.UpdateAfterSimulation10();
@@ -347,7 +349,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 0:
                     Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    mainStorageClass = new Main_Storage_Class.MainStorageClass();
+                    _mainItemStorage = new Main_Storage_Class.MainItemStorage();
                     Initialization_Step++;
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
@@ -357,7 +359,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 1:
                     Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
-                    inventoryGridManager = new InventoryGridManager(mainStorageClass, connectedGrids, GridOwner);
+                    inventoryGridManager = new InventoryGridManager(_mainItemStorage, connectedGrids, GridOwner);
                     Initialization_Step++;
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
@@ -366,7 +368,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 2:
                     Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
-                    sorterChangeHandler = new SorterChangeHandler(mainStorageClass);
+                    sorterChangeHandler = new SorterChangeHandler(_mainItemStorage);
                     Initialization_Step++;
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
@@ -375,10 +377,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 3:
                     Watch.Restart();
                     Logger.Instance.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
-                    modConveyorSorterManager =
-                        new ModConveyorSorterManagerV2(inventoryGridManager.TrashSorter, mainStorageClass,
+                    modConveyorMainManager =
+                        new ModConveyorManager(inventoryGridManager.TrashSorter, _mainItemStorage,
                             inventoryGridManager, sorterChangeHandler.FilterDictionary,
-                            mainStorageClass.NameToDefinition, mainStorageClass.ItemsDictionary);
+                            _mainItemStorage.NameToDefinition, _mainItemStorage.ItemsDictionary);
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
                     Logger.Instance.Log(ClassName, $"Step 4. Time taken {Watch.ElapsedMilliseconds}ms");
@@ -388,13 +390,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             }
         }
 
+        // Logging/Comparison logic.
         public override void UpdateAfterSimulation100()
         {
             base.UpdateAfterSimulation100();
             if (Initialization_Step < 4) return;
 
             inventoryGridManager.OnAfterSimulation100();
-            modConveyorSorterManager.OnAfterSimulation100();
+            modConveyorMainManager.OnAfterSimulation100();
         }
     }
 }

@@ -12,6 +12,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 {
     internal class SorterLimitManager : ModBase
     {
+        // Should be quite good way to hold item limits. Atm they are going like [DefId]=>[Sorter]=>Value with defIds being pre-generated and sorter with value being dictionary.
         public Dictionary<IMyConveyorSorter, ItemLimit> SorterItemLimits;
         public readonly MyDefinitionId DefinitionId;
         private readonly Stopwatch watch = new Stopwatch();
@@ -22,6 +23,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterItemLimits = new Dictionary<IMyConveyorSorter, ItemLimit>();
         }
 
+        // Adds a new conveyor sorter with value.
         public void RegisterSorter(IMyConveyorSorter sorter, ItemLimit itemLimit, MyFixedPoint currentValue)
         {
             SorterItemLimits[sorter] = itemLimit;
@@ -29,11 +31,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             OnValueChangeInit(sorter, currentValue, itemLimit);
         }
 
+        // Removes limits on specific DefinitionId key, Sorter Key, removed value.
         public void UnRegisterSorter(IMyConveyorSorter sorter)
         {
             SorterItemLimits.Remove(sorter);
         }
 
+
+        // Updates limits on specific DefinitionId key, Sorter Key, removed value.
         public void ChangeLimitsOnSorter(IMyConveyorSorter sorter, MyFixedPoint ItemRequestedAmount,
             MyFixedPoint itemTriggerAmount)
         {
@@ -44,13 +49,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             limits.ItemRequestedAmount = ItemRequestedAmount;
         }
 
+
+
+        // Removes events related to sorter and limits data too. Preferably make on close stop event calls.
         private void Sorter_OnClosing(VRage.ModAPI.IMyEntity obj)
         {
             obj.OnClosing -= Sorter_OnClosing;
             SorterItemLimits.Remove((IMyConveyorSorter)obj);
         }
 
-
+        // Adds removes filters from sorters.
         private static void HandleFilterStorageChange(IMyConveyorSorter sorter, MyDefinitionId definitionId,
             bool exceeded)
         {
@@ -66,6 +74,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
         }
 
+
+        // On Init forces values to check if they need to be added to filter or removed.
         private void OnValueChangeInit(IMyConveyorSorter sorter, MyFixedPoint currentValue, ItemLimit itemLimit)
         {
             // Logger.Instance.Log(ClassName, $"Item init, current value: {currentValue}, request amount {itemLimit.ItemRequestedAmount}, trigger amount {itemLimit.ItemTriggerAmount}");
@@ -86,6 +96,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             HandleFilterStorageChange(sorter, DefinitionId, false);
         }
 
+        // Logic behind filters setting on items amount changes.
         public void OnValueChange(MyFixedPoint value)
         {
             watch.Restart();
