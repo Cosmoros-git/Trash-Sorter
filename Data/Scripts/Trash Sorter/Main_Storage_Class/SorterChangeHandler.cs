@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
-using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage;
@@ -29,25 +27,23 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         /// <summary>
         /// Tracks items changes for batch processing
         /// </summary>
-        public Dictionary<MyDefinitionId, MyFixedPoint> PendingItemChanges;
+        public HashSet<MyDefinitionId> PendingItemChanges;
 
         /// <summary>
         /// Initializes a new instance of the SorterChangeHandler class, setting up the filter dictionary and subscribing to item quantity changes.
         /// </summary>
         /// <param name="mainItemStorage">The main item storage that holds the item definitions and quantities.</param>
-        public SorterChangeHandler(MainItemStorage mainItemStorage)
+        public SorterChangeHandler(MainItemStorage mainItemStorage, Logger myLogger)
         {
-            SorterLimitManagers =
-                new Dictionary<MyDefinitionId, SorterLimitManager>(mainItemStorage.NameToDefinitionMap.Count);
-
+            PendingItemChanges = new HashSet<MyDefinitionId>();
+            ItemQuantities = mainItemStorage.ItemsDictionary;
+            SorterLimitManagers = new Dictionary<MyDefinitionId, SorterLimitManager>(mainItemStorage.NameToDefinitionMap.Count);
             foreach (var definitionId in mainItemStorage.ProcessedItems)
             {
-                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId);
+                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId, myLogger, ItemQuantities[definitionId]);
             }
-
-            PendingItemChanges = new Dictionary<MyDefinitionId, MyFixedPoint>();
-            ItemQuantities = mainItemStorage.ItemsDictionary;
-            ItemQuantities.OnValueChanged += OnItemQuantityChanged;
+            ItemQuantities.OnValueChanged += OnItemAmountChanged;
+          
         }
 
         /// <summary>
@@ -55,42 +51,25 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         /// </summary>
         /// <param name="definitionId">The definition ID of the item that has changed.</param>
         /// <param name="newQuantity">The new quantity of the item.</param>
-        private void OnItemQuantityChanged(MyDefinitionId definitionId, MyFixedPoint newQuantity)
+        private void OnItemAmountChanged(MyDefinitionId definitionId)
         {
             // Accumulate the new quantity change into the dictionary
-            if (PendingItemChanges.ContainsKey(definitionId))
-            {
-                var quantity = PendingItemChanges[definitionId] += newQuantity; // Accumulate changes for the same item
-
-                // Remove the entry if the accumulated quantity becomes zero
-                if (quantity == 0)
-                {
-                    PendingItemChanges.Remove(definitionId);
-                }
-            }
-            else
-            {
-                PendingItemChanges[definitionId] = newQuantity; // Add new entry if it doesn't exist
-            }
+            PendingItemChanges.Add(definitionId);
         }
 
         public void OnAfterSimulation100()
         {
             // Make a shallow copy of the dictionary to iterate over
-            var pendingChangesCopy = new Dictionary<MyDefinitionId, MyFixedPoint>(PendingItemChanges);
-            var stringBuild = new StringBuilder();
+            var pendingChangesCopy = new HashSet<MyDefinitionId>(PendingItemChanges);
             // Clear the original pending changes dictionary before processing
             PendingItemChanges.Clear();
 
             // Process all pending item changes from the copied dictionary
-            foreach (var kvp in pendingChangesCopy)
+            foreach (var myDefId in pendingChangesCopy)
             {
                 SorterLimitManager sorterLimitManager;
-                if (!SorterLimitManagers.TryGetValue(kvp.Key, out sorterLimitManager)) continue;
-
-                // Apply the accumulated value change
-                sorterLimitManager.OnValueChange(kvp.Value);
-                stringBuild.Append(kvp.Key + "|" + kvp.Value);
+                if (!SorterLimitManagers.TryGetValue(myDefId, out sorterLimitManager)) continue;
+                sorterLimitManager.OnValueChange();
             }
         }
 
@@ -102,7 +81,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         public override void Dispose()
         {
             base.Dispose();
-            ItemQuantities.OnValueChanged -= OnItemQuantityChanged;
+            ItemQuantities.OnValueChanged -= OnItemAmountChanged;
         }
     }
 }

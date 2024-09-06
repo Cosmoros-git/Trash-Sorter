@@ -2,11 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using ParallelTasks;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
-using Sandbox.Game.Entities.Cube;
-using Sandbox.Game.GameSystems.Conveyors;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage;
@@ -14,7 +11,6 @@ using VRage.Game;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.Game.ModAPI.Ingame;
-using VRage.Utils;
 using IMyCubeBlock = VRage.Game.ModAPI.IMyCubeBlock;
 using IMyCubeGrid = VRage.Game.ModAPI.IMyCubeGrid;
 using IMyInventory = VRage.Game.ModAPI.IMyInventory;
@@ -221,7 +217,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                     if (!ProcessedIds.Contains(definition)) continue;
 
                     // Increment item count in the main storage dictionary
-                    _mainsItemStorage.ItemsDictionary[definition] += item.Amount;
+                    var reference = _mainsItemStorage.ItemsDictionary[definition];
+                    reference.ItemAmount += item.Amount;
                 }
             }
 
@@ -387,7 +384,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             {
                 var definition = item.GetDefinitionId();
                 if (!ProcessedIds.Contains(definition)) continue;
-                _mainsItemStorage.ItemsDictionary[definition] += item.Amount;
+                var reference = _mainsItemStorage.ItemsDictionary[definition];
+                reference.ItemAmount += item.Amount;
             }
         }
 

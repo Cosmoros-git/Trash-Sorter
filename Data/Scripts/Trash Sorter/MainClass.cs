@@ -1,20 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 using Sandbox.Common.ObjectBuilders;
-using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI;
-using Sandbox.ModAPI.Interfaces.Terminal;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
 using VRage.Game.Components;
-using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
@@ -123,7 +113,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 2:
                     Watch.Restart();
                     myLogger.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
-                    sorterChangeHandler = new SorterChangeHandler(_mainItemStorage);
+                    sorterChangeHandler = new SorterChangeHandler(_mainItemStorage, myLogger);
                     Initialization_Step++;
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
@@ -135,7 +125,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     _modSorterMainManager =
                         new ModSorterManager(inventoryGridManager.ModSorters, _mainItemStorage,
                             inventoryGridManager, sorterChangeHandler.SorterLimitManagers,
-                            _mainItemStorage.NameToDefinitionMap, _mainItemStorage.ItemsDictionary, myLogger);
+                            _mainItemStorage.NameToDefinitionMap, myLogger);
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;
                     myLogger.Log(ClassName, $"Step 4. Time taken {Watch.ElapsedMilliseconds}ms");

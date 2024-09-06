@@ -38,12 +38,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <summary>
         /// Dictionary for transforming names into MyDefinitionId objects.
         /// </summary>
-        private readonly Dictionary<string, MyDefinitionId> ItemNameToDefintionMap;
-
-        /// <summary>
-        /// Observable dictionary for tracking current values of MyDefinitionId items.
-        /// </summary>
-        private readonly ObservableDictionary<MyDefinitionId> ItemValuesReference;
+        private readonly Dictionary<string, MyDefinitionId> ItemNameToDefinitionMap;
 
         /// <summary>
         /// Manages the inventory grid and provides event linking.
@@ -70,20 +65,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="inventoryGridManager">Inventory grid manager instance.</param>
         /// <param name="sorterLimitManagers">Dictionary of sorter limit managers.</param>
         /// <param name="nameToDefinition">Dictionary mapping names to item definitions.</param>
-        /// <param name="itemsDictionary">Observable dictionary of item values.</param>
         public ModSorterManager(HashSet<IMyConveyorSorter> sorters,
             MainItemStorage mainItemAccess, InventoryGridManager inventoryGridManager,
             Dictionary<MyDefinitionId, SorterLimitManager> sorterLimitManagers,
-            Dictionary<string, MyDefinitionId> nameToDefinition,
-            ObservableDictionary<MyDefinitionId> itemsDictionary, Logger MyLogger)
+            Dictionary<string, MyDefinitionId> nameToDefinition, Logger MyLogger)
         {
             watch.Start();
             myLogger = MyLogger;
             ModSorterCollection = sorters;
             SorterLimitManagers = sorterLimitManagers;
-            ItemValuesReference = itemsDictionary;
             SorterDataStorageRef = new SorterDataStorage(nameToDefinition, myLogger);
-            ItemNameToDefintionMap = mainItemAccess.NameToDefinitionMap;
+            ItemNameToDefinitionMap = mainItemAccess.NameToDefinitionMap;
             InventoryGridManager = inventoryGridManager;
 
             // Registering event for sorter addition
@@ -104,12 +96,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         private void Create_All_Possible_Entries()
         {
             watch.Restart();
-            var stringBuilder = new StringBuilder(ItemNameToDefintionMap.Count * 50);
+            var stringBuilder = new StringBuilder(ItemNameToDefinitionMap.Count * 50);
             const string separator = " | ";
             string lastType = null;
             stringBuilder.AppendLine("<Trash filter OFF>");
 
-            foreach (var name in ItemNameToDefintionMap)
+            foreach (var name in ItemNameToDefinitionMap)
             {
                 var currentType = name.Value.TypeId.ToString();
                 if (lastType != currentType)
@@ -126,7 +118,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             Guide_Data = stringBuilder.ToString();
             watch.Stop();
             myLogger.Log(ClassName,
-                $"Creating all entries took {watch.Elapsed.Milliseconds}ms, amount of entries sorters {ItemNameToDefintionMap.Count}");
+                $"Creating all entries took {watch.Elapsed.Milliseconds}ms, amount of entries sorters {ItemNameToDefinitionMap.Count}");
         }
 
         /// <summary>
@@ -196,6 +188,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             if (hasFilterTagBeenFound)
             {
+                var defIdList = new List<string>();
+                foreach (var stringData in data)
+                {
+                    var defId = stringData.Split(new[] { '|' }, StringSplitOptions.None)[0].Trim().ToLower();
+                    defIdList.Add(defId);
+                }
                 foreach (var line in removedEntries)
                 {
                     ProcessDeletedLine(line, sorter);
@@ -203,19 +201,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
                 foreach (var line in addedEntries)
                 {
-                    var newLine = ProcessNewLine(line, sorter);
-                    var index = data.IndexOf(line);
+                    string idString;
+                    var newLine = ProcessNewLine(line, sorter, out idString);
+                    var index = defIdList.IndexOf(idString);
                     if (index != -1) data[index] = newLine;
-                }
-
-                var defIdList = new List<string>();
-                if (changedEntries.Count > 0)
-                {
-                    foreach (var stringData in data)
-                    {
-                        var defId = stringData.Split(new[] { '|' }, StringSplitOptions.None)[0].Trim();
-                        defIdList.Add(defId);
-                    }
                 }
 
                 foreach (var sorterChangedData in changedEntries)
@@ -231,7 +220,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             foreach (var t in data)
             {
                 var line = t.Trim();
-                if (!string.IsNullOrWhiteSpace(line)) stringBuilder.AppendLine(line);
+                stringBuilder.Append(line+"\n");
             }
 
             var newCustomData = stringBuilder.ToString();
@@ -242,15 +231,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
 
         // Functions to process new/removed/edited lines. TODO MAYBE LOOK INTO OPTIMIZING THIS
-        private string ProcessNewLine(string trimmedLine, IMyConveyorSorter sorter)
+        private string ProcessNewLine(string trimmedLine, IMyConveyorSorter sorter, out string idString)
         {
             var parts = trimmedLine.Split(new[] { '|' }, StringSplitOptions.None);
             var firstEntry = parts[0].Trim();
-
-
+            idString = firstEntry;
+            myLogger.Log(ClassName, $"Processing new line {firstEntry},{parts}");
             MyDefinitionId definitionId;
-            if (!ItemNameToDefintionMap.TryGetValue(firstEntry, out definitionId))
+            if (!ItemNameToDefinitionMap.TryGetValue(firstEntry, out definitionId))
             {
+                myLogger.Log(ClassName, $"String invalid {firstEntry}");
                 return
                     $"// {firstEntry} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
             }
@@ -260,11 +250,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             switch (parts.Length)
             {
-                case 1:
-                    break;
                 case 2:
                     double.TryParse(parts[1].Trim(), out itemRequestAmount);
-                    if (itemRequestAmount < 0) itemRequestAmount = -1;
+                    if (itemRequestAmount < 0) itemRequestAmount = 0;
                     break;
                 case 3:
                     double.TryParse(parts[1].Trim(), out itemRequestAmount);
@@ -274,29 +262,29 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                         itemTriggerAmount = itemRequestAmount + itemRequestAmount * 0.5;
                     }
 
-                    if (itemRequestAmount < 0) itemRequestAmount = -1;
+                    if (itemRequestAmount < 0) itemRequestAmount = 0;
 
                     break;
             }
 
-            // Create filter if request is above or below 0;
-            var itemLimit = new ItemLimit()
+            // Create filter if request is above or below 0
+            ItemLimit itemLimit = null;
+            if (itemRequestAmount != 0)
             {
-                ItemRequestedAmount = (MyFixedPoint)itemRequestAmount,
-                ItemTriggerAmount = (MyFixedPoint)itemTriggerAmount,
-                OverLimitTrigger = false
-            };
+                itemLimit = new ItemLimit()
+                {
+                    ItemRequestedAmount = (MyFixedPoint)itemRequestAmount,
+                    ItemTriggerAmount = (MyFixedPoint)itemTriggerAmount,
+                    OverLimitTrigger = false
+                };
+            }
+
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(definitionId, out limitManager))
                 return "This is bad, you better don't see this line.";
-
+            
             if (itemRequestAmount == 0) return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
-
-            MyFixedPoint itemAmountNow;
-            if (ItemValuesReference.TryGetValue(definitionId, out itemAmountNow))
-            {
-                limitManager.RegisterSorter(sorter, itemLimit, itemAmountNow);
-            }
+            limitManager.RegisterSorter(sorter, itemLimit);
 
             // Return the line back for custom data.
             return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
@@ -331,7 +319,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         private string ProcessChangedLine(string defId, string combinedValue, IMyConveyorSorter sorter)
         {
             MyDefinitionId definitionId;
-            if (!ItemNameToDefintionMap.TryGetValue(defId, out definitionId))
+            if (!ItemNameToDefinitionMap.TryGetValue(defId, out definitionId))
             {
                 return
                     $"// {defId} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
@@ -367,13 +355,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 return "This is bad, you better don't see this line.";
             }
+            
 
             if (itemRequestAmount == 0)
             {
+                myLogger.Log(ClassName, "Removing limit on sorter");
                 limitManager.UnRegisterSorter(sorter);
             }
             else
             {
+                myLogger.Log(ClassName, "Changing limit on sorter");
                 limitManager.ChangeLimitsOnSorter(sorter, (MyFixedPoint)itemRequestAmount,
                     (MyFixedPoint)itemTriggerAmount);
             }

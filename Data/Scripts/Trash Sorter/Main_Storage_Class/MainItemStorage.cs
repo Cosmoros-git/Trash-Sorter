@@ -9,11 +9,17 @@ using VRage.Utils;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
 {
-    public class ObservableDictionary<TKey> : Dictionary<TKey, MyFixedPoint>
+    public class FixedPointReference
     {
-        public event Action<TKey, MyFixedPoint> OnValueChanged;
+        // This was made because fuck structs.
+        public MyFixedPoint ItemAmount;
+    }
 
-        public new MyFixedPoint this[TKey key]
+    public class ObservableDictionary<TKey> : Dictionary<TKey, FixedPointReference>
+    {
+        public event Action<TKey> OnValueChanged;
+
+        public new FixedPointReference this[TKey key]
         {
             get
             {
@@ -30,25 +36,24 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
                 if (!ContainsKey(key))
                 {
                     Add(key, value);
-                    OnValueChanged?.Invoke(key, value);
+                    OnValueChanged?.Invoke(key);
                     return; // Exit after adding to avoid double-setting below
                 }
 
-                if (EqualityComparer<MyFixedPoint>.Default.Equals(base[key], value)) return;
+                if (EqualityComparer<FixedPointReference>.Default.Equals(base[key], value)) return;
 
                 base[key] = value;
-                OnValueChanged?.Invoke(key, value);
+                OnValueChanged?.Invoke(key);
             }
         }
 
         public void UpdateValue(TKey key, MyFixedPoint updateToValue)
         {
-            if (!ContainsKey(key)) return;
+            FixedPointReference currentValueRef;
+            if (!TryGetValue(key,out currentValueRef)) return;
 
-            //myLogger.Log("Observable dictionary", $"{key} changed value {updateToValue}");
-            var currentValue = base[key];
-            var result = currentValue + updateToValue;
-            this[key] = result; // This will trigger the setter and raise the event
+            currentValueRef.ItemAmount += updateToValue;
+            OnValueChanged?.Invoke(key);
         }
     }
 
@@ -156,8 +161,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         {
             var name = definition.DisplayNameText;
 
-            NameToDefinitionMap[name.Trim()] = definition.Id;
-            ItemsDictionary[definition.Id] = 0;
+            NameToDefinitionMap[name.Trim().ToLower()] = definition.Id;
+            ItemsDictionary[definition.Id] = new FixedPointReference();
             // DefinitionToName[definition.Id] = name;
             ProcessedItems.Add(definition.Id);
             // ProcessedItemsNames.Add(name);

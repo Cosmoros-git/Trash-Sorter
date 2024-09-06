@@ -1,19 +1,13 @@
 ﻿using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using VRage.Game;
-using VRage.Library.Collections;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 {
-
     /// <summary>
     /// The SorterCustomData class is used to manage and process custom data for a sorter.
     /// It stores both the raw custom data string and its processed form as a dictionary of key-value pairs.
@@ -203,29 +197,41 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             foreach (var line in newDataSet)
             {
-                if (line.StartsWith("//")) continue;  // Skip commented lines
+                // Skip empty or whitespace-only lines
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                // Skip commented lines
+                if (line.StartsWith("//")) continue;
+
                 var parts = line.Split('|').Select(part => part.Trim()).ToArray();
-                string keyValue = "";
-                // If there is no separator '|', treat the entire line as the key
-                keyValue = parts.Length <= 1 ? line : parts[0];
-                var value = parts.Length > 1 ? string.Join(" | ", parts.Skip(1)) : "0|0";
+                var keyValue = parts.Length == 0 ? line : parts[0]; // Treat the entire line as key if no separator
+                var value = parts.Length > 1
+                    ? string.Join(" | ", parts.Skip(1))
+                    : "0|0"; // Default value if no separator
+
+                // Normalize both key and value
+                keyValue = keyValue.Trim().ToLower();
+                value = value.Trim();
 
                 newDataDictionary[keyValue] = value;
             }
 
-
             dataFound = true;
+
+            // Track removed entries
             foreach (var entry in oldDataDictionary.Keys)
             {
-                if (newDataDictionary.ContainsKey(entry)) continue;
-
-                MyDefinitionId defId;
-                if (ReferenceIdDictionary.TryGetValue(entry, out defId))
+                if (!newDataDictionary.ContainsKey(entry))
                 {
-                    removedEntries.Add(defId);
+                    MyDefinitionId defId;
+                    if (ReferenceIdDictionary.TryGetValue(entry, out defId))
+                    {
+                        removedEntries.Add(defId);
+                    }
                 }
             }
 
+            // Track added entries
             foreach (var entry in newDataDictionary.Keys)
             {
                 if (!oldDataDictionary.ContainsKey(entry))
@@ -234,19 +240,31 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 }
             }
 
+            // Track changed entries
             foreach (var entry in oldDataDictionary.Keys)
             {
-                if (newDataDictionary.ContainsKey(entry) && oldDataDictionary[entry] != newDataDictionary[entry])
+                string value;
+                if (!newDataDictionary.TryGetValue(entry, out value)) continue;
+
+                var oldValue = oldDataDictionary[entry].Trim();
+                var newValue = value.Trim();
+
+                // Compare normalized values to detect changes
+                if (!string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase))
                 {
-                    changedEntries.Add(entry, newDataDictionary[entry]);
+                    changedEntries.Add(entry, newValue);
                 }
             }
 
+            // Update the processed custom data with the new entries
             customDataAccess.ProcessedCustomData = newDataDictionary;
+
             watch.Stop();
-            myLogger.Log(ClassName, $"Tracking changes in custom data taken {watch.ElapsedMilliseconds}");
+            myLogger.Log(ClassName, $"Tracking changes in custom data took {watch.ElapsedMilliseconds}ms");
+
             return newCustomDataList;
         }
+
 
         /// <summary>
         /// Checks if the custom data of the specified sorter has changed by comparing its checksum
@@ -282,5 +300,4 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                    string.IsNullOrWhiteSpace(rawData?.RawCustomData);
         }
     }
-
 }
