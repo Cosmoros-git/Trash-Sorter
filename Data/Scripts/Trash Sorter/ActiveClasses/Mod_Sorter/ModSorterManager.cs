@@ -138,19 +138,27 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorter">The sorter being added.</param>
         private void Add_Sorter(IMyConveyorSorter sorter)
         {
-            watch.Restart();
+            var wat1 = Stopwatch.StartNew();
             sorter.SetFilter(MyConveyorSorterMode.Whitelist, new List<MyInventoryItemFilter>());
             sorter.DrainAll = true;
-
-            // Register events to avoid memory leaks
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Adding filters to sorter has taken {wat1.Elapsed.TotalMilliseconds}ms");
+            wat1.Restart();
             sorter.OnClose += Sorter_OnClose;
             sorter.CustomNameChanged += Terminal_CustomNameChanged;
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Adding filters to sorter has taken {wat1.Elapsed.TotalMilliseconds}ms");
+            wat1.Restart();
             ModSorterCollection.Add(sorter);
 
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
+            myLogger.Log(ClassName,
+                $"Adding to collection and updating datastorageref to sorter has taken {wat1.Elapsed.TotalMilliseconds}ms");
+            wat1.Stop();
+            wat1.Restart();
             Update_Values(sorter);
-            watch.Stop();
-            myLogger.Log(ClassName, $"Adding sorter has taken {watch.ElapsedMilliseconds}ms");
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Updating values has taken {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
         /// <summary>
@@ -174,18 +182,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorter">The sorter whose values are updated.</param>
         private void Update_Values(IMyConveyorSorter sorter)
         {
-            List<MyDefinitionId> removedEntries;
-            List<string> addedEntries;
-            Dictionary<string, string> changedEntries;
             bool hasFilterTagBeenFound;
-
-            var data = SorterDataStorageRef.TrackChanges(sorter, out removedEntries, out addedEntries,
-                out changedEntries, out hasFilterTagBeenFound);
+            var wat1 = Stopwatch.StartNew();
+            var data = SorterDataStorageRef.TrackChanges(sorter, out hasFilterTagBeenFound);
             myLogger.Log(ClassName,
-                $"New entries {addedEntries.Count}, removed entries {removedEntries.Count}, changed entries {changedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
-
+                $"New entries {SorterDataStorageRef.AddedEntries.Count}, removed entries {SorterDataStorageRef.RemovedEntries.Count}, changed entries {SorterDataStorageRef.ChangedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Step 1 update {wat1.Elapsed.TotalMilliseconds}ms");
+            wat1.Restart();
             if (hasFilterTagBeenFound)
             {
+                var wat2 = Stopwatch.StartNew();
                 var defIdList = new List<string>();
                 foreach (var stringData in data)
                 {
@@ -193,12 +200,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     defIdList.Add(defId);
                 }
 
-                foreach (var line in removedEntries)
+                wat2.Stop();
+                myLogger.Log(ClassName, $"Splitting data took took {wat2.Elapsed.TotalMilliseconds}ms");
+                wat2.Restart();
+                foreach (var line in SorterDataStorageRef.RemovedEntries)
                 {
                     ProcessDeletedLine(line, sorter);
                 }
 
-                foreach (var line in addedEntries)
+                wat2.Stop();
+                myLogger.Log(ClassName, $"Processing removed entires took {wat2.Elapsed.TotalMilliseconds}ms");
+                wat2.Restart();
+                foreach (var line in SorterDataStorageRef.AddedEntries)
                 {
                     string idString;
                     var newLine = ProcessNewLine(line, sorter, out idString);
@@ -206,15 +219,24 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     if (index != -1) data[index] = newLine;
                 }
 
-                foreach (var sorterChangedData in changedEntries)
+                wat2.Stop();
+                myLogger.Log(ClassName, $"Processing added entires took {wat2.Elapsed.TotalMilliseconds}ms");
+                wat2.Restart();
+                foreach (var sorterChangedData in SorterDataStorageRef.ChangedEntries)
                 {
                     var newLine = ProcessChangedLine(sorterChangedData.Key, sorterChangedData.Value, sorter);
                     var index = defIdList.FindIndex(defId =>
                         string.Equals(defId, sorterChangedData.Key.Trim(), StringComparison.OrdinalIgnoreCase));
                     if (index != -1) data[index] = newLine;
                 }
+
+                wat2.Stop();
+                myLogger.Log(ClassName, $"Processing changed entires took {wat2.Elapsed.TotalMilliseconds}ms");
             }
 
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Step 2 update {wat1.Elapsed.TotalMilliseconds}ms");
+            wat1.Restart();
             var stringBuilder = new StringBuilder();
             foreach (var t in data)
             {
@@ -225,6 +247,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var newCustomData = stringBuilder.ToString();
             sorter.CustomData = newCustomData;
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Step 3 update {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
 

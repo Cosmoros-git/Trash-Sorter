@@ -23,23 +23,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
             "SmallTrashSorter"
         };
 
-        protected static readonly HashSet<string> CountedTypes = new HashSet<string>() // Object builders I care about. Also thing of a past.
-        {
-            "MyObjectBuilder_Ingot",
-            "MyObjectBuilder_Ore",
-            "MyObjectBuilder_Component",
-            "MyObjectBuilder_AmmoMagazine"
-        };
-
-        protected static readonly HashSet<string> NamingExceptions = new HashSet<string>() // At end I did not add ingot to everything lmao.
-        {
-            "Stone",
-            "Ice",
-            "Crude Oil",
-            "Coal",
-            "Scrap Metal",
-        };
-
         protected static readonly HashSet<string> UniqueModExceptions = new HashSet<string>()
         {
             "Heat",

@@ -91,47 +91,47 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             switch (Initialization_Step)
             {
                 case 0:
-                    Watch.Restart();
+                    var wat1 = Stopwatch.StartNew();
                     myLogger = GridSystemOwner.Logger;
                     myLogger.Log(ClassName, "Initializing step 1. Creating item storage.");
                     _mainItemStorage = new Main_Storage_Class.MainItemStorage(myLogger);
                     Initialization_Step++;
-                    Watch.Stop();
-                    totalInitTime += Watch.Elapsed;
-                    myLogger.Log(ClassName, $"Step 1. Time taken {Watch.ElapsedMilliseconds}ms");
+                    wat1.Stop();
+                    totalInitTime += wat1.Elapsed;
+                    myLogger.Log(ClassName, $"Step 1. Time taken {wat1.Elapsed.TotalMilliseconds}ms");
                     break;
 
                 case 1:
-                    Watch.Restart();
+                    var wat2 = Stopwatch.StartNew();
                     myLogger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
                     inventoryGridManager = new InventoryGridManager(_mainItemStorage,
                         GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock,
                         myLogger);
                     Initialization_Step++;
-                    Watch.Stop();
-                    totalInitTime += Watch.Elapsed;
-                    myLogger.Log(ClassName, $"Step 2. Time taken {Watch.ElapsedMilliseconds}ms");
+                    wat2.Stop();
+                    totalInitTime += wat2.Elapsed;
+                    myLogger.Log(ClassName, $"Step 2. Time taken {wat2.Elapsed.TotalMilliseconds}ms");
                     break;
                 case 2:
-                    Watch.Restart();
+                    var wat3 = Stopwatch.StartNew();
                     myLogger.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
                     sorterChangeHandler = new SorterChangeHandler(_mainItemStorage, myLogger);
                     Initialization_Step++;
-                    Watch.Stop();
-                    totalInitTime += Watch.Elapsed;
-                    myLogger.Log(ClassName, $"Step 3. Time taken {Watch.ElapsedMilliseconds}ms");
+                    wat3.Stop();
+                    totalInitTime += wat3.Elapsed;
+                    myLogger.Log(ClassName, $"Step 3. Time taken {wat3.Elapsed.TotalMilliseconds}ms");
                     break;
                 case 3:
-                    Watch.Restart();
+                    var wat4 = Stopwatch.StartNew();
                     myLogger.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
                     _modSorterMainManager =
                         new ModSorterManager(inventoryGridManager.ModSorters, _mainItemStorage,
                             inventoryGridManager, sorterChangeHandler.SorterLimitManagers,
                             _mainItemStorage.NameToDefinitionMap, myLogger);
-                    Watch.Stop();
-                    totalInitTime += Watch.Elapsed;
-                    myLogger.Log(ClassName, $"Step 4. Time taken {Watch.ElapsedMilliseconds}ms");
-                    myLogger.Log(ClassName, $"Total init time. Time taken {totalInitTime.Milliseconds}ms");
+                    wat4.Stop();
+                    totalInitTime += wat4.Elapsed;
+                    myLogger.Log(ClassName, $"Step 4. Time taken {wat4.Elapsed.TotalMilliseconds}ms");
+                    myLogger.Log(ClassName, $"Total init time. Time taken {totalInitTime.TotalMilliseconds}ms");
                     Initialization_Step++;
                     break;
             }

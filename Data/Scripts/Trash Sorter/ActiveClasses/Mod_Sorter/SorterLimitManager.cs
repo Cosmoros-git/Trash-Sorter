@@ -79,24 +79,23 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 var sorter = kvp.Key;
 
                 // Log initial state
-                MyLogger.Log(ClassName,
-                    $"[START] Processing sorter: {sorter.CustomName}. ItemAmount: {ItemAmountRef.ItemAmount}, ItemTriggerLimit: {limit.ItemTriggerAmount}, ItemRequestAmount: {limit.ItemRequestedAmount}, OverLimitTrigger: {limit.OverLimitTrigger}");
+                // MyLogger.Log(ClassName,$"[START] Processing sorter: {sorter.CustomName}. ItemAmount: {ItemAmountRef.ItemAmount}, ItemTriggerLimit: {limit.ItemTriggerAmount}, ItemRequestAmount: {limit.ItemRequestedAmount}, OverLimitTrigger: {limit.OverLimitTrigger}");
 
                 // Case 1: Value exceeds the trigger amount, we need to add the item to the filter.
                 if (ItemAmountRef.ItemAmount > limit.ItemTriggerAmount)
                 {
-                    MyLogger.Log(ClassName, $"[INFO] ItemAmount ({ItemAmountRef.ItemAmount}) is greater than ItemTriggerLimit ({limit.ItemTriggerAmount}).");
+                    // MyLogger.Log(ClassName, $"[INFO] ItemAmount ({ItemAmountRef.ItemAmount}) is greater than ItemTriggerLimit ({limit.ItemTriggerAmount}).");
 
                     if (limit.OverLimitTrigger)
                     {
                         // Already over limit, skip further updates.
-                        MyLogger.Log(ClassName, $"[SKIP] OverLimitTrigger is already set. No further actions.");
+                        //   MyLogger.Log(ClassName, $"[SKIP] OverLimitTrigger is already set. No further actions.");
                         continue;
                     }
 
                     // Setting OverLimitTrigger to true and adding the item to the filter.
                     limit.OverLimitTrigger = true;
-                    MyLogger.Log(ClassName, $"[ADD] Setting OverLimitTrigger to true. Adding item {DefinitionId.SubtypeName} to sorter.");
+                    // MyLogger.Log(ClassName, $"[ADD] Setting OverLimitTrigger to true. Adding item {DefinitionId.SubtypeName} to sorter.");
                     HandleFilterStorageChange(sorter, true);
                     continue;
                 }
@@ -105,7 +104,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 if (ItemAmountRef.ItemAmount > limit.ItemRequestedAmount)
                 {
                     // Value is within acceptable limits, no need to add or remove items.
-                    MyLogger.Log(ClassName, $"[INFO] ItemAmount ({ItemAmountRef.ItemAmount}) is within acceptable limits (> ItemRequestedAmount {limit.ItemRequestedAmount}), no filter change needed.");
+                    //   MyLogger.Log(ClassName, $"[INFO] ItemAmount ({ItemAmountRef.ItemAmount}) is within acceptable limits (> ItemRequestedAmount {limit.ItemRequestedAmount}), no filter change needed.");
                     continue;
                 }
 
@@ -113,17 +112,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 if (!limit.OverLimitTrigger)
                 {
                     // The item has already been removed, no further action required.
-                    MyLogger.Log(ClassName, $"[SKIP] OverLimitTrigger is not set. No action required.");
+                    //  MyLogger.Log(ClassName, $"[SKIP] OverLimitTrigger is not set. No action required.");
                     continue;
                 }
 
                 // Reset the flag and remove the item from the filter.
-                MyLogger.Log(ClassName, $"[REMOVE] ItemAmount ({ItemAmountRef.ItemAmount}) dropped below ItemRequestedAmount ({limit.ItemRequestedAmount}). Removing item {DefinitionId.SubtypeName} from sorter.");
+              //  MyLogger.Log(ClassName,$"[REMOVE] ItemAmount ({ItemAmountRef.ItemAmount}) dropped below ItemRequestedAmount ({limit.ItemRequestedAmount}). Removing item {DefinitionId.SubtypeName} from sorter.");
                 limit.OverLimitTrigger = false;
                 HandleFilterStorageChange(sorter, false);
             }
         }
-
 
 
         public override void Dispose()

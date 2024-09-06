@@ -99,9 +99,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <summary>
         /// Stopwatch for tracking execution time of operations.
         /// </summary>
-        private readonly Stopwatch watch = new Stopwatch();
-
         private readonly Logger myLogger;
+
+        public readonly List<MyDefinitionId> RemovedEntries;
+        public readonly List<string> AddedEntries;
+        public readonly Dictionary<string, string> ChangedEntries;
 
         /// <summary>
         /// Initializes a new instance of the SorterDataStorage class and sets up the reference dictionary.
@@ -111,6 +113,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         {
             ReferenceIdDictionary = nameToDefinition;
             myLogger = MyLogger;
+            ChangedEntries = new Dictionary<string, string>();
+            AddedEntries = new List<string>();
+            RemovedEntries = new List<MyDefinitionId>();
         }
 
         /// <summary>
@@ -120,7 +125,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorter">The conveyor sorter object to add or update.</param>
         public void AddOrUpdateSorterRawData(IMyConveyorSorter sorter)
         {
-            watch.Restart();
+            var wat1 = Stopwatch.StartNew();
+
             var customData = sorter.CustomData;
 
             SorterCustomData value;
@@ -143,8 +149,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 value.RawCustomData = customData;
             }
 
-            watch.Stop();
-            myLogger.Log(ClassName, $"Adding or updating storage custom data taken {watch.ElapsedMilliseconds}ms");
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Adding or updating storage custom data taken {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
         /// <summary>
@@ -152,19 +158,19 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// and modified entries, and updates the stored data accordingly.
         /// </summary>
         /// <param name="sorter">The conveyor sorter being tracked.</param>
-        /// <param name="removedEntries">List of removed entries.</param>
+        /// <param name="RemovedEntries">List of removed entries.</param>
         /// <param name="addedEntries">List of added entries.</param>
         /// <param name="changedEntries">Dictionary of changed entries.</param>
         /// <param name="dataFound">Returns true if data is found.</param>
         /// <returns>A list of strings representing the new custom data lines.</returns>
-        public List<string> TrackChanges(IMyConveyorSorter sorter, out List<MyDefinitionId> removedEntries,
-            out List<string> addedEntries, out Dictionary<string, string> changedEntries, out bool dataFound)
+        public List<string> TrackChanges(IMyConveyorSorter sorter, out bool dataFound)
         {
-            watch.Restart();
-            removedEntries = new List<MyDefinitionId>();
-            addedEntries = new List<string>();
-            changedEntries = new Dictionary<string, string>();
+            var wat1 = Stopwatch.StartNew();
             dataFound = false;
+
+            RemovedEntries.Clear();
+            AddedEntries.Clear();
+            ChangedEntries.Clear();
 
             var newCustomData = sorter.CustomData;
             var newCustomDataList = !string.IsNullOrEmpty(newCustomData)
@@ -226,7 +232,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     MyDefinitionId defId;
                     if (ReferenceIdDictionary.TryGetValue(entry, out defId))
                     {
-                        removedEntries.Add(defId);
+                        RemovedEntries.Add(defId);
                     }
                 }
             }
@@ -236,7 +242,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 if (!oldDataDictionary.ContainsKey(entry))
                 {
-                    addedEntries.Add(entry + " | " + newDataDictionary[entry]);
+                    AddedEntries.Add(entry + " | " + newDataDictionary[entry]);
                 }
             }
 
@@ -252,15 +258,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 // Compare normalized values to detect changes
                 if (!string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase))
                 {
-                    changedEntries.Add(entry, newValue);
+                    ChangedEntries.Add(entry, newValue);
                 }
             }
 
             // Update the processed custom data with the new entries
             customDataAccess.ProcessedCustomData = newDataDictionary;
 
-            watch.Stop();
-            myLogger.Log(ClassName, $"Tracking changes in custom data took {watch.ElapsedMilliseconds}ms");
+            wat1.Stop();
+            myLogger.Log(ClassName, $"Tracking changes in custom data took {wat1.Elapsed.TotalMilliseconds}ms");
 
             return newCustomDataList;
         }

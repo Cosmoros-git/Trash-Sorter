@@ -119,7 +119,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         /// </summary>
         private void Get_All_Inventories()
         {
-            ExecutionTimer.Restart();
+            var wat1 = Stopwatch.StartNew();
             myLogs.Log(ClassName, $"Grids to count {ManagedGrids.Count}");
 
             foreach (var myGrid in ManagedGrids)
@@ -169,9 +169,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 }
             }
 
-            ExecutionTimer.Stop();
+            wat1.Stop();
             myLogs.Log(ClassName,
-                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {ExecutionTimer.ElapsedMilliseconds}ms, block count {TrackedBlocks.Count}, trash inventories {TrashBlocks.Count}");
+                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {wat1.Elapsed.TotalMilliseconds}ms, block count {TrackedBlocks.Count}, trash inventories {TrashBlocks.Count}");
         }
 
         /// <summary>
@@ -203,7 +203,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private void Get_Global_Item_Count()
         {
             // This method runs once at the start to gather initial item counts.
-            ExecutionTimer.Restart();
+            var wat1 = Stopwatch.StartNew();
             myLogs.Log(ClassName, $"Fetching global item count");
 
             foreach (var inventory in Inventories)
@@ -222,9 +222,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 }
             }
 
-            ExecutionTimer.Stop();
+            wat1.Stop();
             myLogs.Log(ClassName,
-                $"Finished counting items, time taken {ExecutionTimer.ElapsedMilliseconds}ms");
+                $"Finished counting items, time taken {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
 
@@ -243,7 +243,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         // Todo manager logic and just now its broken somewhat. All grid events except close, that one works.
         private void OnGridMerge(MyCubeGrid arg1, MyCubeGrid arg2)
         {
-            ExecutionTimer.Restart();
+           
             // If grid owner is considered the one to be merged set is as main.
             if (arg2 == _primaryGrid)
             {
@@ -251,14 +251,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             }
 
             Add_Inventories_GridMerge(arg1);
-            ExecutionTimer.Stop();
-            myLogs.LogWarning(ClassName,
-                $"GridMerge Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {ExecutionTimer.ElapsedMilliseconds}ms");
         }
 
         private void OnGridSplit(MyCubeGrid arg1, MyCubeGrid arg2)
         {
-            ExecutionTimer.Restart();
+     
             if (_systemBlock.CubeGrid == arg1)
             {
                 FatGrid_OnClosing(arg2);
@@ -267,11 +264,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             {
                 FatGrid_OnGridSplit(arg2);
             }
-
-
-            ExecutionTimer.Stop();
-            myLogs.LogWarning(ClassName,
-                $"GridSplit Alarm, Grid 1 name is {arg1.DisplayName}, grid 1 block count is {arg1.BlocksCount}, time taken {ExecutionTimer.ElapsedMilliseconds}ms");
         }
 
 
@@ -279,12 +271,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private void Add_Inventories_GridMerge(IMyCubeGrid changedMainGrid)
         {
             // Get all the fat blocks that are of type IMyTerminalBlock
-            ExecutionTimer.Restart();
             changedMainGrid.GetGridGroup(GridLinkTypeEnum.Mechanical).GetGrids(ManagedGrids);
             Get_All_Inventories();
-            ExecutionTimer.Start();
-            myLogs.Log(ClassName,
-                $"Grid merge detected, time taken to calculate {ExecutionTimer.ElapsedMilliseconds}");
         }
 
         // Probably work fine?
@@ -341,7 +329,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         // Adds inventories or trash sorters when block added to the grid.
         private void FatGrid_OnFatBlockAdded(MyCubeBlock obj)
         {
-            ExecutionTimer.Restart();
+            var wat1 = Stopwatch.StartNew();
             var block = obj as IMyTerminalBlock;
             if (block == null) return;
 
@@ -371,9 +359,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                 Add_Inventory((MyInventory)block.GetInventory(i));
             }
 
-            ExecutionTimer.Stop();
+            wat1.Stop();
             myLogs.Log(ClassName,
-                $"Grid inventory added, time taken to calculate {ExecutionTimer.ElapsedMilliseconds}");
+                $"Grid inventory added, time taken to calculate {wat1.Elapsed.TotalMilliseconds}");
         }
 
         private void SingleInventoryScan(IMyInventory inventory)
