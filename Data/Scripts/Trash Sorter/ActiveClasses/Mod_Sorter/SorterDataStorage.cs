@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
 using VRage.Game;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
@@ -99,7 +100,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <summary>
         /// Stopwatch for tracking execution time of operations.
         /// </summary>
-        private readonly Logger myLogger;
 
         public readonly List<MyDefinitionId> RemovedEntries;
         public readonly List<string> AddedEntries;
@@ -109,10 +109,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// Initializes a new instance of the SorterDataStorage class and sets up the reference dictionary.
         /// </summary>
         /// <param name="nameToDefinition">A dictionary mapping names to MyDefinitionId objects.</param>
-        public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition, Logger MyLogger)
+        public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition)
         {
             ReferenceIdDictionary = nameToDefinition;
-            myLogger = MyLogger;
             ChangedEntries = new Dictionary<string, string>();
             AddedEntries = new List<string>();
             RemovedEntries = new List<MyDefinitionId>();
@@ -150,7 +149,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
 
             wat1.Stop();
-            myLogger.Log(ClassName, $"Adding or updating storage custom data taken {wat1.Elapsed.TotalMilliseconds}ms");
+            Logger.Log(ClassName, $"Adding or updating storage custom data taken {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
         /// <summary>
@@ -177,6 +176,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 ? new List<string>(newCustomData.Split(new[] { '\r', '\n' }, StringSplitOptions.None))
                 : new List<string>();
 
+
             var newNonEmptyEntries = newCustomDataList
                 .Where(line => !string.IsNullOrWhiteSpace(line))
                 .ToList();
@@ -184,7 +184,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var startIndex = newNonEmptyEntries.FindIndex(line => line.Contains("<Trash filter ON>"));
             if (startIndex == -1)
             {
-                dataFound = true;
+                dataFound = false;
                 return newCustomDataList;
             }
 
@@ -216,7 +216,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     : "0|0"; // Default value if no separator
 
                 // Normalize both key and value
-                keyValue = keyValue.Trim().ToLower();
+                keyValue = keyValue.Trim();
                 value = value.Trim();
 
                 newDataDictionary[keyValue] = value;
@@ -252,7 +252,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 string value;
                 if (!newDataDictionary.TryGetValue(entry, out value)) continue;
 
-                var oldValue = oldDataDictionary[entry].Trim();
+                var oldValue = oldDataDictionary[entry];
                 var newValue = value.Trim();
 
                 // Compare normalized values to detect changes
@@ -266,7 +266,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             customDataAccess.ProcessedCustomData = newDataDictionary;
 
             wat1.Stop();
-            myLogger.Log(ClassName, $"Tracking changes in custom data took {wat1.Elapsed.TotalMilliseconds}ms");
+            Logger.Log(ClassName, $"Tracking changes in custom data took {wat1.Elapsed.TotalMilliseconds}ms");
 
             return newCustomDataList;
         }
@@ -283,14 +283,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterCustomData value;
             if (!sorterDataDictionary.TryGetValue(sorter, out value))
             {
-                myLogger.Log(ClassName, $"Storage value not found");
+                Logger.Log(ClassName, $"Storage value not found");
                 return true;
             }
 
             var checksum = SorterCustomData.ComputeSimpleChecksum(sorter.CustomData);
             if (checksum == value.CheckSum) return false;
 
-            myLogger.Log(ClassName, $"Checksum of string {checksum} is not equal stored {value.CheckSum}");
+            Logger.Log(ClassName, $"Checksum of string {checksum} is not equal stored {value.CheckSum}");
             return true;
         }
 

@@ -1,9 +1,10 @@
 ﻿using System.Collections.Generic;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
 using VRage.Game;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
+namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
 {
     /// <summary>
     /// The SorterChangeHandler class manages changes in item quantities and updates associated sorter limits. 
@@ -27,23 +28,21 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         /// </summary>
         public HashSet<MyDefinitionId> PendingItemChanges;
 
-        private readonly Logger MyLogger;
 
         /// <summary>
         /// Initializes a new instance of the SorterChangeHandler class, setting up the filter dictionary and subscribing to item quantity changes.
         /// </summary>
         /// <param name="mainItemStorage">The main item storage that holds the item definitions and quantities.</param>
-        public SorterChangeHandler(MainItemStorage mainItemStorage, Logger myLogger)
+        public SorterChangeHandler(MainItemStorage mainItemStorage)
         {
             PendingItemChanges = new HashSet<MyDefinitionId>();
             ItemQuantities = mainItemStorage.ItemsDictionary;
-            MyLogger = myLogger;
             SorterLimitManagers = new Dictionary<MyDefinitionId, SorterLimitManager>(mainItemStorage.NameToDefinitionMap.Count);
             foreach (var definitionId in mainItemStorage.ProcessedItems)
             {
                 FixedPointReference value;
                 ItemQuantities.TryGetValue(definitionId, out value);
-                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId, myLogger, value);
+                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId, value);
             }
             ItemQuantities.OnValueChanged += OnItemAmountChanged;
           
@@ -75,7 +74,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
                 SorterLimitManager sorterLimitManager;
                 if (!SorterLimitManagers.TryGetValue(myDefId, out sorterLimitManager)) continue;
                 sorterLimitManager.OnValueChange();
-                MyLogger.Log(ClassName, $"Value changed: {myDefId}");
             }
         }
 

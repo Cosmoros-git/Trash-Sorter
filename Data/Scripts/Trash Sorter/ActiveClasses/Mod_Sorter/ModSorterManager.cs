@@ -6,8 +6,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Sandbox.ModAPI.Ingame;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
-using VRage;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
 using VRage.Game;
 using IMyConveyorSorter = Sandbox.ModAPI.IMyConveyorSorter;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
@@ -40,6 +40,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// </summary>
         private readonly Dictionary<string, MyDefinitionId> ItemNameToDefinitionMap;
 
+        private readonly HashSet<IMyTerminalBlock> GuideHasBeenSet;
+
         /// <summary>
         /// Manages the inventory grid and provides event linking.
         /// </summary>
@@ -49,13 +51,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// Stopwatch to track operation time.
         /// </summary>
         private readonly Stopwatch watch = new Stopwatch();
-
-        /// <summary>
-        /// Guide data string used for generating user instructions.
-        /// </summary>
-        private string Guide_Data;
-
-        private readonly Logger myLogger;
 
         /// <summary>
         /// Initializes a new instance of the ModConveyorManager class and registers events.
@@ -68,24 +63,24 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         public ModSorterManager(HashSet<IMyConveyorSorter> sorters,
             MainItemStorage mainItemAccess, InventoryGridManager inventoryGridManager,
             Dictionary<MyDefinitionId, SorterLimitManager> sorterLimitManagers,
-            Dictionary<string, MyDefinitionId> nameToDefinition, Logger MyLogger)
+            Dictionary<string, MyDefinitionId> nameToDefinition)
         {
             watch.Start();
-            myLogger = MyLogger;
             ModSorterCollection = sorters;
             SorterLimitManagers = sorterLimitManagers;
-            SorterDataStorageRef = new SorterDataStorage(nameToDefinition, myLogger);
+            SorterDataStorageRef = new SorterDataStorage(nameToDefinition);
             ItemNameToDefinitionMap = mainItemAccess.NameToDefinitionMap;
             InventoryGridManager = inventoryGridManager;
+            GuideHasBeenSet = new HashSet<IMyTerminalBlock>();
 
             // Registering event for sorter addition
             inventoryGridManager.OnModSorterAdded += Add_Sorter;
 
             // Create entries and initialize sorters
-            Create_All_Possible_Entries();
+
             SorterInit();
             watch.Stop();
-            myLogger.Log(ClassName,
+            Logger.Log(ClassName,
                 $"Initialization took {watch.Elapsed.Milliseconds}ms, amount of trash sorters {ModSorterCollection.Count}");
         }
 
@@ -93,34 +88,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <summary>
         /// Creates all possible item entries for user reference.
         /// </summary>
-        private void Create_All_Possible_Entries()
-        {
-            watch.Restart();
-            var stringBuilder = new StringBuilder(ItemNameToDefinitionMap.Count * 50);
-            const string separator = " | ";
-            string lastType = null;
-            stringBuilder.AppendLine("<Trash filter OFF>");
-
-            foreach (var name in ItemNameToDefinitionMap)
-            {
-                var currentType = name.Value.TypeId.ToString();
-                if (lastType != currentType)
-                {
-                    if (lastType != null) stringBuilder.AppendLine();
-                    stringBuilder.AppendLine($"// {currentType}");
-                    stringBuilder.AppendLine();
-                    lastType = currentType;
-                }
-
-                stringBuilder.AppendLine($"{name.Key}{separator}0{separator}0");
-            }
-
-            Guide_Data = stringBuilder.ToString();
-            watch.Stop();
-            myLogger.Log(ClassName,
-                $"Creating all entries took {watch.Elapsed.Milliseconds}ms, amount of entries sorters {ItemNameToDefinitionMap.Count}");
-        }
-
         /// <summary>
         /// Initializes each sorter by setting default values and registering events.
         /// </summary>
@@ -138,27 +105,17 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorter">The sorter being added.</param>
         private void Add_Sorter(IMyConveyorSorter sorter)
         {
-            var wat1 = Stopwatch.StartNew();
             sorter.SetFilter(MyConveyorSorterMode.Whitelist, new List<MyInventoryItemFilter>());
             sorter.DrainAll = true;
-            wat1.Stop();
-            myLogger.Log(ClassName, $"Adding filters to sorter has taken {wat1.Elapsed.TotalMilliseconds}ms");
-            wat1.Restart();
+
+
             sorter.OnClose += Sorter_OnClose;
             sorter.CustomNameChanged += Terminal_CustomNameChanged;
-            wat1.Stop();
-            myLogger.Log(ClassName, $"Adding filters to sorter has taken {wat1.Elapsed.TotalMilliseconds}ms");
-            wat1.Restart();
             ModSorterCollection.Add(sorter);
 
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
-            myLogger.Log(ClassName,
-                $"Adding to collection and updating datastorageref to sorter has taken {wat1.Elapsed.TotalMilliseconds}ms");
-            wat1.Stop();
-            wat1.Restart();
+
             Update_Values(sorter);
-            wat1.Stop();
-            myLogger.Log(ClassName, $"Updating values has taken {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
         /// <summary>
@@ -184,73 +141,84 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         {
             bool hasFilterTagBeenFound;
             var wat1 = Stopwatch.StartNew();
+
+            // Track changes and fetch data
             var data = SorterDataStorageRef.TrackChanges(sorter, out hasFilterTagBeenFound);
-            myLogger.Log(ClassName,
+
+            Logger.Log(ClassName,
                 $"New entries {SorterDataStorageRef.AddedEntries.Count}, removed entries {SorterDataStorageRef.RemovedEntries.Count}, changed entries {SorterDataStorageRef.ChangedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
-            wat1.Stop();
-            myLogger.Log(ClassName, $"Step 1 update {wat1.Elapsed.TotalMilliseconds}ms");
-            wat1.Restart();
+
+            // Process the data only if the filter tag was found
             if (hasFilterTagBeenFound)
             {
-                var wat2 = Stopwatch.StartNew();
-                var defIdList = new List<string>();
-                foreach (var stringData in data)
+                wat1.Restart();
+
+                // Prepare a dictionary for fast lookups instead of using IndexOf
+                var defIdDictionary = new Dictionary<string, int>();
+                for (var i = 0; i < data.Count; i++)
                 {
-                    var defId = stringData.Split(new[] { '|' }, StringSplitOptions.None)[0].Trim().ToLower();
-                    defIdList.Add(defId);
+                    var defId = data[i].Split('|')[0].Trim();
+                    defIdDictionary[defId] = i;
                 }
 
-                wat2.Stop();
-                myLogger.Log(ClassName, $"Splitting data took took {wat2.Elapsed.TotalMilliseconds}ms");
-                wat2.Restart();
+                // Process removed entries
                 foreach (var line in SorterDataStorageRef.RemovedEntries)
                 {
                     ProcessDeletedLine(line, sorter);
                 }
 
-                wat2.Stop();
-                myLogger.Log(ClassName, $"Processing removed entires took {wat2.Elapsed.TotalMilliseconds}ms");
-                wat2.Restart();
+                // Process added entries
                 foreach (var line in SorterDataStorageRef.AddedEntries)
                 {
                     string idString;
                     var newLine = ProcessNewLine(line, sorter, out idString);
-                    var index = defIdList.IndexOf(idString);
-                    if (index != -1) data[index] = newLine;
+
+                    // Lookup using dictionary for faster access
+                    int index;
+                    if (defIdDictionary.TryGetValue(idString, out index))
+                    {
+                        data[index] = newLine;
+                    }
                 }
 
-                wat2.Stop();
-                myLogger.Log(ClassName, $"Processing added entires took {wat2.Elapsed.TotalMilliseconds}ms");
-                wat2.Restart();
+                // Process changed entries
                 foreach (var sorterChangedData in SorterDataStorageRef.ChangedEntries)
                 {
                     var newLine = ProcessChangedLine(sorterChangedData.Key, sorterChangedData.Value, sorter);
-                    var index = defIdList.FindIndex(defId =>
-                        string.Equals(defId, sorterChangedData.Key.Trim(), StringComparison.OrdinalIgnoreCase));
-                    if (index != -1) data[index] = newLine;
+
+                    // Lookup using dictionary for faster access
+                    int index;
+                    if (defIdDictionary.TryGetValue(sorterChangedData.Key, out index))
+                    {
+                        data[index] = newLine;
+                    }
                 }
-
-                wat2.Stop();
-                myLogger.Log(ClassName, $"Processing changed entires took {wat2.Elapsed.TotalMilliseconds}ms");
             }
 
-            wat1.Stop();
-            myLogger.Log(ClassName, $"Step 2 update {wat1.Elapsed.TotalMilliseconds}ms");
-            wat1.Restart();
-            var stringBuilder = new StringBuilder();
-            foreach (var t in data)
-            {
-                var line = t.Trim();
-                stringBuilder.Append(line + "\n");
-            }
-
-            var newCustomData = stringBuilder.ToString();
-            sorter.CustomData = newCustomData;
+            // Rebuild custom data efficiently using StringBuilder
+            sorter.CustomData = UsingStringBuilder(data);
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
-            wat1.Stop();
-            myLogger.Log(ClassName, $"Step 3 update {wat1.Elapsed.TotalMilliseconds}ms");
         }
 
+        public string UsingStringBuilder(List<string> array)
+        {
+            var sb = new StringBuilder();
+            for (var i = 0; i < array.Count; i++)
+            {
+                sb.Append(array[i]);
+                if (i < array.Count - 1)
+                {
+                    sb.Append("\r\n"); // Append new line after each element except the last one
+                }
+            }
+
+            return sb.ToString();
+        }
+
+
+        private double itemRequestAmount;
+
+        private double itemTriggerAmount;
 
         // Functions to process new/removed/edited lines. TODO MAYBE LOOK INTO OPTIMIZING THIS
         private string ProcessNewLine(string trimmedLine, IMyConveyorSorter sorter, out string idString)
@@ -261,13 +229,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             MyDefinitionId definitionId;
             if (!ItemNameToDefinitionMap.TryGetValue(firstEntry, out definitionId))
             {
-                myLogger.Log(ClassName, $"String invalid {firstEntry}");
+                Logger.Log(ClassName, $"String invalid {firstEntry}");
                 return
                     $"// {firstEntry} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
             }
-
-            double itemRequestAmount = 0;
-            double itemTriggerAmount = 0;
 
             switch (parts.Length)
             {
@@ -288,24 +253,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     break;
             }
 
-            // Create filter if request is above or below 0
-            ItemLimit itemLimit = null;
-            if (itemRequestAmount != 0)
-            {
-                itemLimit = new ItemLimit()
-                {
-                    ItemRequestedAmount = (MyFixedPoint)itemRequestAmount,
-                    ItemTriggerAmount = (MyFixedPoint)itemTriggerAmount,
-                    OverLimitTrigger = false
-                };
-            }
-
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(definitionId, out limitManager))
                 return "This is bad, you better don't see this line.";
 
             if (itemRequestAmount == 0) return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
-            limitManager.RegisterSorter(sorter, itemLimit);
+            limitManager.RegisterSorter(sorter, itemRequestAmount, itemTriggerAmount);
 
             // Return the line back for custom data.
             return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
@@ -322,7 +275,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(defId, out limitManager))
             {
-                myLogger.LogError(ClassName, "This is bad, you better don't see this line.");
+                Logger.LogError(ClassName, "This is bad, you better don't see this line.");
                 return;
             }
 
@@ -337,6 +290,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="combinedValue">The value string representing request and trigger amounts.</param>
         /// <param name="sorter">The sorter being updated.</param>
         /// <returns>A formatted string representing the updated line.</returns>
+        ///
+        /// 
         private string ProcessChangedLine(string defId, string combinedValue, IMyConveyorSorter sorter)
         {
             MyDefinitionId definitionId;
@@ -346,51 +301,45 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     $"// {defId} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
             }
 
-            double itemRequestAmount = 0;
-            double itemTriggerAmount = 0;
-
+            // Parse the combined value into parts
             var parts = combinedValue.Split(new[] { '|' }, StringSplitOptions.None);
 
-
-            if (parts.Length > 0)
+            // Parse itemRequestAmount if parts exist and it's valid
+            if (parts.Length > 0 && (!double.TryParse(parts[0].Trim(), out itemRequestAmount) || itemRequestAmount < 0))
             {
-                if (!double.TryParse(parts[0].Trim(), out itemRequestAmount) || itemRequestAmount < 0)
-                {
-                    itemRequestAmount = 0;
-                }
+                itemRequestAmount = 0;
             }
 
-            if (parts.Length > 1)
+            // Parse itemTriggerAmount if parts[1] exists, or calculate default value
+            if (parts.Length > 1 && (!double.TryParse(parts[1].Trim(), out itemTriggerAmount) ||
+                                     itemTriggerAmount <= itemRequestAmount))
             {
-                if (!double.TryParse(parts[1].Trim(), out itemTriggerAmount) || itemTriggerAmount <= itemRequestAmount)
-                {
-                    // If parsing fails or trigger amount is less than or equal to request amount,
-                    // default to a calculated value based on itemRequestAmount
-                    itemTriggerAmount = itemRequestAmount + Math.Abs(itemRequestAmount) * 0.75;
-                }
+                // Default to 75% higher than itemRequestAmount if invalid or not set
+                itemTriggerAmount = itemRequestAmount + Math.Abs(itemRequestAmount) * 0.75;
             }
 
-
+            // Check if the SorterLimitManager exists for the given definitionId
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(definitionId, out limitManager))
             {
-                return "This is bad, you better don't see this line.";
+                Logger.LogError(ClassName, $"Failed to find SorterLimitManager for definition ID: {definitionId}");
+                return $"// Error: SorterLimitManager not found for definitionId {definitionId}.";
             }
 
-
+            // Remove or update sorter limits based on itemRequestAmount
             if (itemRequestAmount == 0)
             {
-                myLogger.Log(ClassName, "Removing limit on sorter");
+                Logger.Log(ClassName, $"Removing limit on sorter {sorter.CustomName} for {definitionId.SubtypeName}");
                 limitManager.UnRegisterSorter(sorter);
             }
             else
             {
-                myLogger.Log(ClassName, "Changing limit on sorter");
-                limitManager.ChangeLimitsOnSorter(sorter, (MyFixedPoint)itemRequestAmount,
-                    (MyFixedPoint)itemTriggerAmount);
+                Logger.Log(ClassName,
+                    $"Changing limit on sorter {sorter.CustomName}: Request = {itemRequestAmount}, Trigger = {itemTriggerAmount}");
+                limitManager.ChangeLimitsOnSorter(sorter, itemRequestAmount, itemTriggerAmount);
             }
 
-            myLogger.Log(ClassName, $"Changed line is: {defId} | {itemRequestAmount} | {itemTriggerAmount}");
+            Logger.Log(ClassName, $"Changed line is: {defId} | {itemRequestAmount} | {itemTriggerAmount}");
             return $"{defId} | {itemRequestAmount} | {itemTriggerAmount}";
         }
 
@@ -403,12 +352,21 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         private void Terminal_CustomNameChanged(IMyTerminalBlock obj)
         {
             var name = obj.CustomName;
-            if (name.IndexOf(GuideCall, StringComparison.OrdinalIgnoreCase) < 0) return;
 
-            myLogger.Log(ClassName, $"Sorter guide detected, {name}");
+            if (name.IndexOf(GuideCall, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                if (GuideHasBeenSet.Contains(obj)) return;
+            }
+            else
+            {
+                if (GuideHasBeenSet.Contains(obj)) GuideHasBeenSet.Remove(obj);
+            }
+
+
+            Logger.Log(ClassName, $"Sorter guide detected, {name}");
             obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty,
                 RegexOptions.IgnoreCase);
-            obj.CustomData = Guide_Data;
+            obj.CustomData = ModSessionComponent.Guide_Data;
             SorterDataStorageRef.AddOrUpdateSorterRawData((IMyConveyorSorter)obj);
         }
 
@@ -424,7 +382,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
 
         /// <summary>
-        /// Event handler for when a sorter is closed. Unregisters events and removes the sorter from the collection.
+        /// Event handler for when a sorter is closed. Un-registers events and removes the sorter from the collection.
         /// </summary>
         /// <param name="obj">The entity (sorter) that is being closed.</param>
         private void Sorter_OnClose(VRage.ModAPI.IMyEntity obj)
@@ -437,7 +395,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
 
         /// <summary>
-        /// Disposes the ModConveyorManager instance and unregisters all events to prevent memory leaks.
+        /// Disposes the ModConveyorManager instance and un-registers all events to prevent memory leaks.
         /// </summary>
         public override void Dispose()
         {

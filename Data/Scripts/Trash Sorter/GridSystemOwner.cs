@@ -4,6 +4,7 @@ using Sandbox.Game.Entities;
 using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -23,11 +24,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private bool IsOtherManagerGone;
         private string OtherManagerId;
         private readonly string SystemBlockId;
-
-        // ReSharper disable once NotAccessedField.Local
-        public Logger Logger;
-
-
+        
         public IMyEntity SystemEntity;
         public IMyCubeBlock SystemBlock;
         public IMyCubeGrid SystemGrid;
@@ -89,32 +86,31 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             // Check if the block's grid is valid
             if (block.CubeGrid == null)
             {
-                MyLog.Default.WriteLine("CubeGrid is null.");
+                Logger.LogError("MainClass", "CubeGrid is null.");
                 return false;
             }
 
             // Check if the block has physics enabled
             if (block.CubeGrid.Physics == null)
             {
-                MyLog.Default.WriteLine("Physics is null.");
+                Logger.LogError("MainClass","Physics is null.");
                 return false;
             }
 
             // Check if GridManagement passes
             if (!GridManagement(block))
             {
-                MyLog.Default.WriteLine("GridManagement failed.");
+                Logger.LogError("MainClass","GridManagement failed.");
                 IsOnStandBy = true;
                 return false;
             }
 
             // If all checks pass, proceed with startup
-            Logger = new Logger(block.EntityId.ToString());
             block.OnMarkForClose += Block_OnMarkForClose;
             SubscribeForGridChanges();
             IsOnline = true; // Mark as online after successful verification
             OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
-            Logger.Log(ClassName, "Wtf is going onn here?");
+            Logger.Log(ClassName, "What are you doing in my swamp!?");
             return true;
         }
 
@@ -268,7 +264,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             notManagedGrids = new HashSet<IMyCubeGrid>();
 
             SystemBlock.CubeGrid.GetGridGroup(GridLinkTypeEnum.Mechanical)?.GetGrids(NewConnectedToSystemGrids);
-
             foreach (var grid in NewConnectedToSystemGrids)
             {
                 long storedId;
@@ -298,6 +293,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         {
             // Logic is if new grid - old grid gives more blocks than old grid means it means merged grid is bigger.
             return (newGrid.BlocksCount - oldSavedGrid.BlocksCount) > oldSavedGrid.BlocksCount;
+            
         }
 
 
@@ -476,6 +472,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             obj.OnClosing -= Block_OnMarkForClose;
             OnNeedsUpdate(MyEntityUpdateEnum.NONE);
             OnDisposeInvoke();
+            Logger.LogWarning(ClassName,"Dispose called.");
             Dispose();
         }
     }

@@ -6,6 +6,8 @@ using Sandbox.Game;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
 using VRage;
 using VRage.Game;
 using VRage.Game.Entity;
@@ -68,7 +70,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         /// <summary>
         /// Reference to the main item storage, used to update item values and manage stored data.
         /// </summary>
-        private readonly Main_Storage_Class.MainItemStorage _mainsItemStorage;
+        private readonly MainItemStorage _mainsItemStorage;
 
         /// <summary>
         /// Stopwatch for debugging purposes, measuring execution time of certain operations.
@@ -81,7 +83,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private float AccumulatedTime;
 
         private readonly IMyCubeBlock _systemBlock;
-        private readonly Logger myLogs;
 
         /// <summary>
         /// Initializes a new instance of the InventoryGridManager class.
@@ -90,20 +91,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         /// <param name="managedGrids">Set of cube grids to manage.</param>
         /// <param name="primaryGrid">The owner grid for the grid manager.</param>
         /// <param name="systemBlock">The system manager block.</param>
-        public InventoryGridManager(Main_Storage_Class.MainItemStorage mainItemStorage,
-            HashSet<IMyCubeGrid> managedGrids, IMyCubeGrid primaryGrid, IMyCubeBlock systemBlock, Logger MyLogs)
+        public InventoryGridManager(MainItemStorage mainItemStorage,
+            HashSet<IMyCubeGrid> managedGrids, IMyCubeGrid primaryGrid, IMyCubeBlock systemBlock)
         {
-            MyLogs.Log(ClassName, "Started Inventory Grid manager");
+            Logger.Log(ClassName, "Started Inventory Grid manager");
             ManagedGrids = managedGrids;
             _primaryGrid = primaryGrid;
             _systemBlock = systemBlock;
             _mainsItemStorage = mainItemStorage;
-            myLogs = MyLogs;
             ProcessedIds = mainItemStorage.ProcessedItems;
 
             // Initialize inventories and global item counts
             Get_All_Inventories();
-            Get_Global_Item_Count();
             GridDispose += GridSystemOwnerCallback_GridDispose;
             
         }
@@ -119,21 +118,35 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         /// </summary>
         private void Get_All_Inventories()
         {
-            var wat1 = Stopwatch.StartNew();
-            myLogs.Log(ClassName, $"Grids to count {ManagedGrids.Count}");
+            var wat1 = Stopwatch.StartNew();  // Overall time for the method
+            var watGrid = new Stopwatch();    // Time for processing each grid
+            var watBlocks = new Stopwatch();  // Time for processing each block
+            var watTrashCheck = new Stopwatch();  // Time for checking trash inventories
+            var watInventoryAdd = new Stopwatch();  // Time for adding inventories
+
+            Logger.Log(ClassName, $"Grids to count {ManagedGrids.Count}");
 
             foreach (var myGrid in ManagedGrids)
             {
-                // Get all blocks of type IMyTerminalBlock from the grid
-                var blocks = myGrid.GetFatBlocks<IMyTerminalBlock>();
+                watGrid.Restart();
+                var blocks = myGrid.GetFatBlocks<IMyTerminalBlock>().ToHashSet();
                 Grid_Add((MyCubeGrid)myGrid);
+                watGrid.Stop();
+
+                Logger.Log(ClassName, $"Processed grid {myGrid.DisplayName}, block count: {blocks.Count}, time taken: {watGrid.Elapsed.TotalMilliseconds}ms");
 
                 foreach (var block in blocks)
                 {
+                    watBlocks.Restart();
+
                     if (TrackedBlocks.Contains(block)) return;
 
                     // Skip blocks with no inventories
-                    if (block.InventoryCount <= 0) continue;
+                    if (block.InventoryCount <= 0)
+                    {
+                        watBlocks.Stop();
+                        continue;
+                    }
 
                     // Add block if it can use the conveyor system
                     if (CanUseConveyorSystem(block))
@@ -147,6 +160,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                         var sorter = (IMyConveyorSorter)block;
                         ModSorters.Add(sorter);
                         OnModSorterAdded?.Invoke(sorter);
+                        watBlocks.Stop();
                         continue;
                     }
 
@@ -154,25 +168,34 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                     block.OnClosing += Block_OnClosing;
                     block.CustomNameChanged += Terminal_CustomNameChanged;
 
-                    // Check if block is a trash inventory
+                    watBlocks.Stop();
+
+                    // Time to check if the block is a trash inventory
+                    watTrashCheck.Restart();
                     if (IsTrashInventory(block))
                     {
                         TrashBlocks.Add(block);
+                        watTrashCheck.Stop();
                         continue;
                     }
+                    watTrashCheck.Stop();
 
-                    // Add inventories from the block
+                    // Time to add inventories from the block
+                    watInventoryAdd.Restart();
                     for (var i = 0; i < block.InventoryCount; i++)
                     {
                         Add_Inventory((MyInventory)block.GetInventory(i));
                     }
+                    watInventoryAdd.Stop();
                 }
+
+                Logger.Log(ClassName, $"Processed all blocks in grid {myGrid.DisplayName}, time taken: {watBlocks.Elapsed.TotalMilliseconds}ms, trash check time: {watTrashCheck.Elapsed.TotalMilliseconds}ms, inventory add time: {watInventoryAdd.Elapsed.TotalMilliseconds}ms");
             }
 
             wat1.Stop();
-            myLogs.Log(ClassName,
-                $"Finished counting inventories, total inventories {Inventories.Count}, time taken {wat1.Elapsed.TotalMilliseconds}ms, block count {TrackedBlocks.Count}, trash inventories {TrashBlocks.Count}");
+            Logger.Log(ClassName, $"Finished counting inventories, total inventories {Inventories.Count}, total time taken: {wat1.Elapsed.TotalMilliseconds}ms, block count {TrackedBlocks.Count}, trash inventories {TrashBlocks.Count}");
         }
+
 
         /// <summary>
         /// Checks whether a block can use the conveyor system by verifying if it is one of the relevant block types.
@@ -200,40 +223,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         /// Scans all managed inventories at initialization and sums up the total item amounts.
         /// It uses the ProcessedIds to filter which items to track, and updates the item counts in the main item storage.
         /// </summary>
-        private void Get_Global_Item_Count()
-        {
-            // This method runs once at the start to gather initial item counts.
-            var wat1 = Stopwatch.StartNew();
-            myLogs.Log(ClassName, $"Fetching global item count");
-
-            foreach (var inventory in Inventories)
-            {
-                var itemList = ((MyInventory)inventory).GetItems();
-                if (itemList.Count == 0) continue;
-
-                foreach (var item in itemList)
-                {
-                    var definition = item.GetDefinitionId();
-                    if (!ProcessedIds.Contains(definition)) continue;
-
-                    // Increment item count in the main storage dictionary
-                    var reference = _mainsItemStorage.ItemsDictionary[definition];
-                    reference.ItemAmount += item.Amount;
-                }
-            }
-
-            wat1.Stop();
-            myLogs.Log(ClassName,
-                $"Finished counting items, time taken {wat1.Elapsed.TotalMilliseconds}ms");
-        }
-
 
         // Pure debug TODO REMOVE ON PUBLISH
         public void OnAfterSimulation100()
         {
             if (AccumulatedTime > 100)
             {
-                myLogs.LogWarning(ClassName,
+                Logger.LogWarning(ClassName,
                     $"Inventory changes total time taken {AccumulatedTime}ms, medium time per tick {AccumulatedTime / 100} ");
             }
 
@@ -262,7 +258,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             }
             else
             {
-                FatGrid_OnGridSplit(arg2);
+                FatGrid_OnGridSplit(arg1);
             }
         }
 
@@ -299,9 +295,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             var connectedGridsToRemove = new HashSet<IMyCubeGrid>();
 
             myCubeGrid.GetGridGroup(GridLinkTypeEnum.Mechanical)?.GetGrids(connectedGridsToRemove);
-            foreach (var Grid in connectedGridsToRemove)
+            foreach (var grid in connectedGridsToRemove)
             {
-                var myGrid = (MyCubeGrid)Grid;
+                var myGrid = (MyCubeGrid)grid;
                 myGrid.OnClosing -= FatGrid_OnClosing;
                 myGrid.OnFatBlockAdded -= FatGrid_OnFatBlockAdded;
                 myGrid.OnGridSplit -= OnGridSplit;
@@ -353,14 +349,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             // Skip adding inventories if the block's Name contains the "Trash" keyword
             if (IsTrashInventory(block)) return;
             // Adding all inventories
-            myLogs.Log(ClassName, $"Inventory added: {block.DisplayNameText}");
+            Logger.Log(ClassName, $"Inventory added: {block.DisplayNameText}");
             for (var i = 0; i < block.InventoryCount; i++)
             {
                 Add_Inventory((MyInventory)block.GetInventory(i));
             }
 
             wat1.Stop();
-            myLogs.Log(ClassName,
+            Logger.Log(ClassName,
                 $"Grid inventory added, time taken to calculate {wat1.Elapsed.TotalMilliseconds}");
         }
 
@@ -387,7 +383,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
                 var block = (IMyCubeBlock)myTerminalBlock;
                 TrashBlocks.Add(myTerminalBlock);
-                myLogs.Log(ClassName, $"Block considered as trash inventory.");
+                Logger.Log(ClassName, $"Block considered as trash inventory.");
                 for (var i = 0; i < block.InventoryCount; i++)
                 {
                     Remove_Inventory((MyInventory)block.GetInventory(i));
@@ -399,7 +395,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
                 var block = (IMyCubeBlock)myTerminalBlock;
                 TrashBlocks.Remove(myTerminalBlock);
-                myLogs.Log(ClassName, $"Block removed from trash inventories.");
+                Logger.Log(ClassName, $"Block removed from trash inventories.");
                 for (var i = 0; i < block.InventoryCount; i++)
                 {
                     Add_Inventory((MyInventory)block.GetInventory(i));
@@ -435,6 +431,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             SingleInventoryScan(inventory);
             Inventories.Add(inventory);
             inventory.InventoryContentChanged += InventoryOnInventoryContentChanged;
+            var itemList = inventory.GetItems();
+            if (itemList.Count == 0) return;
         }
 
         private void Remove_Inventory(MyInventory inventory)
@@ -479,7 +477,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             base.Dispose();
             foreach (var grid in ManagedGrids)
             {
-                Grid_Remove((MyCubeGrid)grid);
+                FatGrid_OnClosing((MyCubeGrid)grid);
             }
 
             foreach (var block in TrackedBlocks)

@@ -3,11 +3,11 @@ using System.Diagnostics;
 using Sandbox.Common.ObjectBuilders;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
 using VRage.Game.Components;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
-using VRage.Utils;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 {
@@ -42,19 +42,35 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
     {
         private const string ClassName = "Main-Class";
         public GridSystemOwner GridSystemOwner;
-        public Stopwatch Watch = new Stopwatch();
-        private Logger myLogger;
+        private bool isSubbed;
+
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
             base.Init(objectBuilder);
+            if (ModSessionComponent.IsInitializationAllowed == false)
+            {
+                ModSessionComponent.AllowInitialization += ModSessionComponent_AllowInitialization;
+                isSubbed = true;
+            }
+            else
+            {
+                ModSessionComponent_AllowInitialization();
+            }
+        }
+
+        private void ModSessionComponent_AllowInitialization()
+        {
+            if (isSubbed) ModSessionComponent.AllowInitialization -= ModSessionComponent_AllowInitialization;
+
             NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
-            MyLog.Default.WriteLine("Trash Sorter starting up");
+            Logger.Log("MainClass", "Trash Sorter starting up");
             GridSystemOwner = new GridSystemOwner(Entity);
 
             GridSystemOwner.NeedsUpdate += GridSystemOwnerCallback_NeedsUpdate;
             GridSystemOwner.DisposeInvoke += GridSystemOwnerCallback_DisposeInvoke;
         }
+
 
         public override void UpdateOnceBeforeFrame()
         {
@@ -92,46 +108,44 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             {
                 case 0:
                     var wat1 = Stopwatch.StartNew();
-                    myLogger = GridSystemOwner.Logger;
-                    myLogger.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    _mainItemStorage = new Main_Storage_Class.MainItemStorage(myLogger);
+                    Logger.Log(ClassName, "Initializing step 1. Creating item storage.");
+                    _mainItemStorage = new MainItemStorage();
                     Initialization_Step++;
                     wat1.Stop();
                     totalInitTime += wat1.Elapsed;
-                    myLogger.Log(ClassName, $"Step 1. Time taken {wat1.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 1. Time taken {wat1.Elapsed.TotalMilliseconds}ms");
                     break;
 
                 case 1:
                     var wat2 = Stopwatch.StartNew();
-                    myLogger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
+                    Logger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
                     inventoryGridManager = new InventoryGridManager(_mainItemStorage,
-                        GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock,
-                        myLogger);
+                        GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock);
                     Initialization_Step++;
                     wat2.Stop();
                     totalInitTime += wat2.Elapsed;
-                    myLogger.Log(ClassName, $"Step 2. Time taken {wat2.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 2. Time taken {wat2.Elapsed.TotalMilliseconds}ms");
                     break;
                 case 2:
                     var wat3 = Stopwatch.StartNew();
-                    myLogger.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
-                    sorterChangeHandler = new SorterChangeHandler(_mainItemStorage, myLogger);
+                    Logger.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
+                    sorterChangeHandler = new SorterChangeHandler(_mainItemStorage);
                     Initialization_Step++;
                     wat3.Stop();
                     totalInitTime += wat3.Elapsed;
-                    myLogger.Log(ClassName, $"Step 3. Time taken {wat3.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 3. Time taken {wat3.Elapsed.TotalMilliseconds}ms");
                     break;
                 case 3:
                     var wat4 = Stopwatch.StartNew();
-                    myLogger.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
+                    Logger.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
                     _modSorterMainManager =
                         new ModSorterManager(inventoryGridManager.ModSorters, _mainItemStorage,
                             inventoryGridManager, sorterChangeHandler.SorterLimitManagers,
-                            _mainItemStorage.NameToDefinitionMap, myLogger);
+                            _mainItemStorage.NameToDefinitionMap);
                     wat4.Stop();
                     totalInitTime += wat4.Elapsed;
-                    myLogger.Log(ClassName, $"Step 4. Time taken {wat4.Elapsed.TotalMilliseconds}ms");
-                    myLogger.Log(ClassName, $"Total init time. Time taken {totalInitTime.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 4. Time taken {wat4.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Total init time. Time taken {totalInitTime.TotalMilliseconds}ms");
                     Initialization_Step++;
                     break;
             }

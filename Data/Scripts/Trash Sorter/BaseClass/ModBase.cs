@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
@@ -22,12 +21,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
             "LargeTrashSorter",
             "SmallTrashSorter"
         };
-
-        protected static readonly HashSet<string> UniqueModExceptions = new HashSet<string>()
-        {
-            "Heat",
-        };
-
 
         public event Action<MyEntityUpdateEnum> NeedsUpdate;
 
