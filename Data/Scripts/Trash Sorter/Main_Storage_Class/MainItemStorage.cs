@@ -13,6 +13,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
     {
         // This was made because fuck structs.
         public MyFixedPoint ItemAmount;
+
+        public FixedPointReference(MyFixedPoint itemAmount)
+        {
+            ItemAmount = itemAmount;
+        }
     }
 
     public class ObservableDictionary<TKey> : Dictionary<TKey, FixedPointReference>
@@ -50,8 +55,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         public void UpdateValue(TKey key, MyFixedPoint updateToValue)
         {
             FixedPointReference currentValueRef;
-            if (!TryGetValue(key,out currentValueRef)) return;
-
+            if (!TryGetValue(key,out currentValueRef))
+            {
+                Add(key,new FixedPointReference(updateToValue));
+                return;
+            }
             currentValueRef.ItemAmount += updateToValue;
             OnValueChanged?.Invoke(key);
         }
@@ -75,11 +83,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         {
             myLogger = MyLogger;
             myLogger.Log(ClassName, "Item storage created");
-            //DefinitionToName = new Dictionary<MyDefinitionId, string>();
+
             NameToDefinitionMap = new Dictionary<string, MyDefinitionId>();
             ItemsDictionary = new ObservableDictionary<MyDefinitionId>();
             ProcessedItems = new HashSet<MyDefinitionId>();
-            // ProcessedItemsNames = new HashSet<string>();
             GetDefinitions();
         }
 
@@ -162,10 +169,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
             var name = definition.DisplayNameText;
 
             NameToDefinitionMap[name.Trim().ToLower()] = definition.Id;
-            ItemsDictionary[definition.Id] = new FixedPointReference();
-            // DefinitionToName[definition.Id] = name;
+            ItemsDictionary[definition.Id] = new FixedPointReference(0);
             ProcessedItems.Add(definition.Id);
-            // ProcessedItemsNames.Add(name);
         }
     }
 }

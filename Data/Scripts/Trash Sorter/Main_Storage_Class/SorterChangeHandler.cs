@@ -1,8 +1,6 @@
 ﻿using System.Collections.Generic;
-using System.Text;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using VRage;
 using VRage.Game;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
@@ -29,6 +27,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         /// </summary>
         public HashSet<MyDefinitionId> PendingItemChanges;
 
+        private readonly Logger MyLogger;
+
         /// <summary>
         /// Initializes a new instance of the SorterChangeHandler class, setting up the filter dictionary and subscribing to item quantity changes.
         /// </summary>
@@ -37,14 +37,19 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
         {
             PendingItemChanges = new HashSet<MyDefinitionId>();
             ItemQuantities = mainItemStorage.ItemsDictionary;
+            MyLogger = myLogger;
             SorterLimitManagers = new Dictionary<MyDefinitionId, SorterLimitManager>(mainItemStorage.NameToDefinitionMap.Count);
             foreach (var definitionId in mainItemStorage.ProcessedItems)
             {
-                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId, myLogger, ItemQuantities[definitionId]);
+                FixedPointReference value;
+                ItemQuantities.TryGetValue(definitionId, out value);
+                SorterLimitManagers[definitionId] = new SorterLimitManager(definitionId, myLogger, value);
             }
             ItemQuantities.OnValueChanged += OnItemAmountChanged;
           
         }
+
+     
 
         /// <summary>
         /// Called whenever the item quantity changes in the main storage. Adds values into batch updates.
@@ -70,6 +75,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.Main_Storage_Class
                 SorterLimitManager sorterLimitManager;
                 if (!SorterLimitManagers.TryGetValue(myDefId, out sorterLimitManager)) continue;
                 sorterLimitManager.OnValueChange();
+                MyLogger.Log(ClassName, $"Value changed: {myDefId}");
             }
         }
 

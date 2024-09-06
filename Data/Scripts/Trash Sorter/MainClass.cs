@@ -52,8 +52,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             MyLog.Default.WriteLine("Trash Sorter starting up");
             GridSystemOwner = new GridSystemOwner(Entity);
 
-            GridSystemOwnerCallback.NeedsUpdate += GridSystemOwnerCallback_NeedsUpdate;
-            GridSystemOwnerCallback.DisposeInvoke += GridSystemOwnerCallback_DisposeInvoke;
+            GridSystemOwner.NeedsUpdate += GridSystemOwnerCallback_NeedsUpdate;
+            GridSystemOwner.DisposeInvoke += GridSystemOwnerCallback_DisposeInvoke;
         }
 
         public override void UpdateOnceBeforeFrame()
@@ -64,8 +64,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private void GridSystemOwnerCallback_DisposeInvoke()
         {
-            GridSystemOwnerCallback.NeedsUpdate -= GridSystemOwnerCallback_NeedsUpdate;
-            GridSystemOwnerCallback.DisposeInvoke -= GridSystemOwnerCallback_DisposeInvoke;
+            GridSystemOwner.NeedsUpdate -= GridSystemOwnerCallback_NeedsUpdate;
+            GridSystemOwner.DisposeInvoke -= GridSystemOwnerCallback_DisposeInvoke;
         }
 
         private void GridSystemOwnerCallback_NeedsUpdate(MyEntityUpdateEnum obj)
@@ -104,7 +104,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 case 1:
                     Watch.Restart();
                     myLogger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
-                    inventoryGridManager = new InventoryGridManager(_mainItemStorage, GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock,myLogger);
+                    inventoryGridManager = new InventoryGridManager(_mainItemStorage,
+                        GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock,
+                        myLogger);
                     Initialization_Step++;
                     Watch.Stop();
                     totalInitTime += Watch.Elapsed;

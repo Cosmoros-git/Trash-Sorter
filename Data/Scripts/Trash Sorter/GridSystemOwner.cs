@@ -11,28 +11,9 @@ using VRage.Utils;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 {
-    public static class GridSystemOwnerCallback
+    public class GridSystemOwnerCallback
     {
-        public static event Action<MyEntityUpdateEnum> NeedsUpdate;
-
-        public static void OnNeedsUpdate(MyEntityUpdateEnum obj)
-        {
-            NeedsUpdate?.Invoke(obj);
-        }
-
-        public static event Action DisposeInvoke;
-
-        public static void OnDisposeInvoke()
-        {
-            DisposeInvoke?.Invoke();
-        }
-
-        public static event Action<IMyCubeGrid> GridDispose;
-
-        public static void OnGridDispose(IMyCubeGrid obj)
-        {
-            GridDispose?.Invoke(obj);
-        }
+        
     }
 
     public class GridSystemOwner : ModBase
@@ -69,7 +50,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             if (IsOnline)
             {
                 // If the block is already online, continue with regular updates
-                GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
+                OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
                                                       MyEntityUpdateEnum.EACH_100TH_FRAME);
                 return;
             }
@@ -78,7 +59,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             {
                 // If the block was successfully verified, start regular updates
                 MyLog.Default.WriteLine("Trash Sorter startup finished");
-                GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
+                OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
                                                       MyEntityUpdateEnum.EACH_100TH_FRAME);
                 return;
             }
@@ -86,14 +67,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             if (!IsOnStandBy)
             {
                 // If the block is not verified, and we're not on standby, retry next frame
-                GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
+                OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
                 return;
             }
 
             // If we fail to verify after retrying, enter standby mode
             MyLog.Default.WriteLine("Trash Sorter could not start. Entering standby.");
             Dispose();
-            GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.NONE);
+            OnNeedsUpdate(MyEntityUpdateEnum.NONE);
         }
 
         private bool VerifyBlock()
@@ -137,7 +118,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             block.OnMarkForClose += Block_OnMarkForClose;
             SubscribeForGridChanges();
             IsOnline = true; // Mark as online after successful verification
-            GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
+            OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
             Logger.Log(ClassName,"Wtf is going onn here?");
             return true;
         }
@@ -177,7 +158,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 // Dispose of current manager and relinquish control over the grids
                 foreach (var grid in managedGrids)
                 {
-                    GridSystemOwnerCallback.OnGridDispose(grid);
+                    OnGridDispose(grid);
                     grid.Storage.RemoveValue(Guid);
                 }
             }
@@ -216,7 +197,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 // Dispose of current manager and relinquish control over the grids
                 foreach (var grid in managedGrids)
                 {
-                    GridSystemOwnerCallback.OnGridDispose(grid);
+                    OnGridDispose(grid);
                     grid.Storage.RemoveValue(Guid);
                 }
             }
@@ -449,7 +430,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     storage.SetValue(Guid, blockId);
 
                     isThisManager = true;
-                    GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
+                    OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
                     continue;
                 }
 
@@ -462,7 +443,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     storage.SetValue(Guid, blockId);
 
                     isThisManager = true;
-                    GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
+                    OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
                     continue;
                 }
 
@@ -497,8 +478,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         {
             // Moved entire dispose into earlier method to be sure it does its job.
             obj.OnClosing -= Block_OnMarkForClose;
-            GridSystemOwnerCallback.OnNeedsUpdate(MyEntityUpdateEnum.NONE);
-            GridSystemOwnerCallback.OnDisposeInvoke();
+            OnNeedsUpdate(MyEntityUpdateEnum.NONE);
+            OnDisposeInvoke();
             Dispose();
         }
     }

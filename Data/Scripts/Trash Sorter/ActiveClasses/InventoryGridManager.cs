@@ -41,7 +41,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         public event Action<IMyConveyorSorter> OnModSorterAdded;
 
         /// <summary>
-        /// Set of observed inventories to manage event unlinks and logic.
+        /// Set of observed inventories to manage event un links and logic.
         /// </summary>
         public HashSet<IMyInventory> Inventories = new HashSet<IMyInventory>();
 
@@ -104,8 +104,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             // Initialize inventories and global item counts
             Get_All_Inventories();
             Get_Global_Item_Count();
-            GridSystemOwnerCallback.GridDispose += GridSystemOwnerCallback_GridDispose;
-            ;
+            GridDispose += GridSystemOwnerCallback_GridDispose;
+            
         }
 
         private void GridSystemOwnerCallback_GridDispose(IMyCubeGrid obj)
@@ -430,7 +430,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private void InventoryOnInventoryContentChanged(MyInventoryBase arg1, MyPhysicalInventoryItem arg2,
             MyFixedPoint arg3)
         {
-            ExecutionTimer.Restart();
             var definition = arg2.GetDefinitionId();
             //Logger.Instance.Log(ClassName, $"Changed {definition}, change {arg3}");
             if (ProcessedIds.Contains(definition))
@@ -439,7 +438,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             }
 
             ExecutionTimer.Stop();
-            AccumulatedTime += ExecutionTimer.ElapsedMilliseconds;
         }
 
 

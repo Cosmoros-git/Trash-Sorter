@@ -174,8 +174,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorter">The sorter whose values are updated.</param>
         private void Update_Values(IMyConveyorSorter sorter)
         {
-            watch.Restart();
-
             List<MyDefinitionId> removedEntries;
             List<string> addedEntries;
             Dictionary<string, string> changedEntries;
@@ -194,6 +192,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     var defId = stringData.Split(new[] { '|' }, StringSplitOptions.None)[0].Trim().ToLower();
                     defIdList.Add(defId);
                 }
+
                 foreach (var line in removedEntries)
                 {
                     ProcessDeletedLine(line, sorter);
@@ -220,13 +219,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             foreach (var t in data)
             {
                 var line = t.Trim();
-                stringBuilder.Append(line+"\n");
+                stringBuilder.Append(line + "\n");
             }
 
             var newCustomData = stringBuilder.ToString();
             sorter.CustomData = newCustomData;
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
-            watch.Stop();
         }
 
 
@@ -236,7 +234,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var parts = trimmedLine.Split(new[] { '|' }, StringSplitOptions.None);
             var firstEntry = parts[0].Trim();
             idString = firstEntry;
-            myLogger.Log(ClassName, $"Processing new line {firstEntry},{parts}");
             MyDefinitionId definitionId;
             if (!ItemNameToDefinitionMap.TryGetValue(firstEntry, out definitionId))
             {
@@ -282,7 +279,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterLimitManager limitManager;
             if (!SorterLimitManagers.TryGetValue(definitionId, out limitManager))
                 return "This is bad, you better don't see this line.";
-            
+
             if (itemRequestAmount == 0) return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
             limitManager.RegisterSorter(sorter, itemLimit);
 
@@ -355,7 +352,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 return "This is bad, you better don't see this line.";
             }
-            
+
 
             if (itemRequestAmount == 0)
             {
@@ -396,14 +393,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// </summary>
         public void OnAfterSimulation100()
         {
-            watch.Restart();
             foreach (var sorter in ModSorterCollection)
             {
                 Try_Updating_Values(sorter);
             }
-
-            watch.Stop();
-            DebugTimeClass.TimeOne = TimeSpan.Zero;
         }
 
         /// <summary>

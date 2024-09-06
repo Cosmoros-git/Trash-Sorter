@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
 {
+
+
+
     public abstract class ModBase: IDisposable
     {
         // Logging feature to not write class names constantly.
@@ -39,6 +44,29 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
         {
             "Heat",
         };
+
+
+        public event Action<MyEntityUpdateEnum> NeedsUpdate;
+
+        public void OnNeedsUpdate(MyEntityUpdateEnum obj)
+        {
+            NeedsUpdate?.Invoke(obj);
+        }
+
+        public event Action DisposeInvoke;
+
+        public void OnDisposeInvoke()
+        {
+            DisposeInvoke?.Invoke();
+        }
+
+        public event Action<IMyCubeGrid> GridDispose;
+
+        public void OnGridDispose(IMyCubeGrid obj)
+        {
+            GridDispose?.Invoke(obj);
+        }
+
         public virtual void Dispose()
         {
             
