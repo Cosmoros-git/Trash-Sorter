@@ -11,11 +11,6 @@ using VRage.Utils;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 {
-    public class GridSystemOwnerCallback
-    {
-        
-    }
-
     public class GridSystemOwner : ModBase
     {
         private readonly Guid Guid = new Guid("f6ea728c-8890-4012-8c81-165593a65b86");
@@ -51,7 +46,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             {
                 // If the block is already online, continue with regular updates
                 OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
-                                                      MyEntityUpdateEnum.EACH_100TH_FRAME);
+                              MyEntityUpdateEnum.EACH_100TH_FRAME);
                 return;
             }
 
@@ -60,7 +55,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 // If the block was successfully verified, start regular updates
                 MyLog.Default.WriteLine("Trash Sorter startup finished");
                 OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
-                                                      MyEntityUpdateEnum.EACH_100TH_FRAME);
+                              MyEntityUpdateEnum.EACH_100TH_FRAME);
                 return;
             }
 
@@ -119,7 +114,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             SubscribeForGridChanges();
             IsOnline = true; // Mark as online after successful verification
             OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
-            Logger.Log(ClassName,"Wtf is going onn here?");
+            Logger.Log(ClassName, "Wtf is going onn here?");
             return true;
         }
 
@@ -174,6 +169,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             // Verify the current block's status after the split
             VerifyBlock();
         }
+
         private void Grid_OnGridMerge(IMyCubeGrid arg1, IMyCubeGrid arg2)
         {
             IMyEntity otherManager;
