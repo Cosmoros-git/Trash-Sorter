@@ -1,41 +1,47 @@
 ﻿using System;
-using System.Collections.Generic;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass
 {
+
+
+
     public abstract class ModBase: IDisposable
     {
+        // Logging feature to not write class names constantly.
         public string ClassName => GetType().Name;
 
+        // Tags for info or change of status.
         public const string Trash = "[TRASH]";
         public const string GuideCall = "[GUIDE]";
 
+        // Subtype id of blocks I use as sorter.
         protected static readonly string[] TrashSubtype = {
             "LargeTrashSorter",
             "SmallTrashSorter"
         };
 
-        protected static readonly HashSet<string> CountedTypes = new HashSet<string>()
-        {
-            "MyObjectBuilder_Ingot",
-            "MyObjectBuilder_Ore",
-            "MyObjectBuilder_Component",
-            "MyObjectBuilder_AmmoMagazine"
-        };
+        public event Action<MyEntityUpdateEnum> NeedsUpdate;
 
-        protected static readonly HashSet<string> NamingExceptions = new HashSet<string>()
+        public void OnNeedsUpdate(MyEntityUpdateEnum obj)
         {
-            "Stone",
-            "Ice",
-            "Crude Oil",
-            "Coal",
-            "Scrap Metal",
-        };
+            NeedsUpdate?.Invoke(obj);
+        }
 
-        protected static readonly HashSet<string> UniqueModExceptions = new HashSet<string>()
+        public event Action DisposeInvoke;
+
+        public void OnDisposeInvoke()
         {
-            "Heat",
-        };
+            DisposeInvoke?.Invoke();
+        }
+
+        public event Action<IMyCubeGrid> GridDispose;
+
+        public void OnGridDispose(IMyCubeGrid obj)
+        {
+            GridDispose?.Invoke(obj);
+        }
 
         public virtual void Dispose()
         {

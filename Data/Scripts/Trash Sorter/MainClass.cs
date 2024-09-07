@@ -1,22 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 using Sandbox.Common.ObjectBuilders;
-using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI;
-using Sandbox.ModAPI.Interfaces.Terminal;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Conveyor_Sorter_Manager;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
+using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
 using VRage.Game.Components;
-using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
-using VRage.Utils;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 {
@@ -39,7 +30,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
      * Custom Data Change Manager -> Because of event not working as intended this class deals with scanning every object custom data and dealing with it in different ways.
      * Data parser -> Takes the data from the custom data and passes it into more useful type of data.
      *
-     *
+     * TODO fix issue with grid splitting/merging
      *
      *
      */
@@ -47,337 +38,128 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_MyProgrammableBlock), false, "LargeTrashController",
         "SmallTrashController")]
-    public class ModHeartbeatCore : MyGameLogicComponent
+    public class MainClass : MyGameLogicComponent
     {
-        // ReSharper disable once InconsistentNaming
-
-        private readonly Guid Guid = new Guid("f6ea728c-8890-4012-8c81-165593a65b86");
         private const string ClassName = "Main-Class";
-        private readonly HashSet<IMyCubeGrid> connectedGrids = new HashSet<IMyCubeGrid>();
-        private IMyCubeBlock block;
-        public static IMyCubeGrid gridOwner;
-        public Stopwatch watch = new Stopwatch();
+        public GridSystemOwner GridSystemOwner;
+        private bool isSubbed;
+
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
             base.Init(objectBuilder);
-            NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
-            MyLog.Default.WriteLine("Trash Sorter starting up");
+            if (ModSessionComponent.IsInitializationAllowed == false)
+            {
+                ModSessionComponent.AllowInitialization += ModSessionComponent_AllowInitialization;
+                isSubbed = true;
+            }
+            else
+            {
+                ModSessionComponent_AllowInitialization();
+            }
         }
 
-        private bool IsOnline;
-        private bool IsOnStandBy;
-        private bool IsOtherManagerGone;
-        private string OtherManagerId;
-        private int Initialization_Step;
+        private void ModSessionComponent_AllowInitialization()
+        {
+            if (isSubbed) ModSessionComponent.AllowInitialization -= ModSessionComponent_AllowInitialization;
 
-        // ReSharper disable once NotAccessedField.Local
-        private Logger _logger;
+            NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
+            Logger.Log("MainClass", "Trash Sorter starting up");
+            GridSystemOwner = new GridSystemOwner(Entity);
+
+            GridSystemOwner.NeedsUpdate += GridSystemOwnerCallback_NeedsUpdate;
+            GridSystemOwner.DisposeInvoke += GridSystemOwnerCallback_DisposeInvoke;
+        }
+
 
         public override void UpdateOnceBeforeFrame()
         {
             base.UpdateOnceBeforeFrame();
-
-            if (IsOnline)
-            {
-                // If the block is already online, continue with regular updates
-                NeedsUpdate = MyEntityUpdateEnum.EACH_10TH_FRAME;
-                return;
-            }
-
-            if (VerifyBlock())
-            {
-                // If the block was successfully verified, start regular updates
-                MyLog.Default.WriteLine("Trash Sorter startup finished");
-                NeedsUpdate = MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
-            }
-            else
-            {
-                if (!IsOnStandBy)
-                {
-                    // If the block is not verified, and we're not on standby, retry next frame
-                    NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
-                }
-                else
-                {
-                    // If we fail to verify after retrying, enter standby mode
-                    MyLog.Default.WriteLine("Trash Sorter could not start. Entering standby.");
-                    NeedsUpdate = MyEntityUpdateEnum.NONE;
-                }
-            }
+            GridSystemOwner.UpdateOnceBeforeFrame(); // Initializing management.
         }
 
-        private bool VerifyBlock()
+        private void GridSystemOwnerCallback_DisposeInvoke()
         {
-            if (IsOnline) return true; // Early exit if already online
-            if (IsOtherManagerGone) return true; // Removed extra checks on load from standby
-
-            MyLog.Default.WriteLine("Trash Sorter starting up");
-
-            block = Entity as IMyCubeBlock;
-            if (block == null)
-            {
-                MyLog.Default.WriteLine("Entity is not a valid IMyCubeBlock.");
-                return false;
-            }
-
-            // Check if the block's grid is valid
-            if (block.CubeGrid == null)
-            {
-                MyLog.Default.WriteLine("CubeGrid is null.");
-                return false;
-            }
-
-            // Check if the block has physics enabled
-            if (block.CubeGrid.Physics == null)
-            {
-                MyLog.Default.WriteLine("Physics is null.");
-                return false;
-            }
-
-            // Check if GridManagement passes
-            if (!GridManagement(block))
-            {
-                MyLog.Default.WriteLine("GridManagement failed.");
-                IsOnStandBy = true;
-                return false;
-            }
-
-            // If all checks pass, proceed with startup
-            _logger = new Logger(block.EntityId.ToString());
-            block.OnClosing += Block_OnClosing;
-            gridOwner = block.CubeGrid;
-            IsOnline = true; // Mark as online after successful verification
-
-            return true;
+            GridSystemOwner.NeedsUpdate -= GridSystemOwnerCallback_NeedsUpdate;
+            GridSystemOwner.DisposeInvoke -= GridSystemOwnerCallback_DisposeInvoke;
         }
 
-
-        private void Block_OnClosing(IMyEntity obj)
+        private void GridSystemOwnerCallback_NeedsUpdate(MyEntityUpdateEnum obj)
         {
-            obj.OnClosing -= Block_OnClosing;
-            _mainStorageClass.Dispose();
+            NeedsUpdate = obj;
         }
 
-        private bool GridManagement(IMyCubeBlock iMyBlock)
-        {
-            var blockId = iMyBlock.EntityId.ToString();
-            var isThisManager = false;
-            var hasSubscribed = false;
-
-            iMyBlock.CubeGrid.GetGridGroup(GridLinkTypeEnum.Mechanical)?.GetGrids(connectedGrids);
-
-            foreach (var grid in connectedGrids)
-            {
-                var storage = grid.Storage;
-
-                if (storage == null)
-                {
-                    MyLog.Default.WriteLine($"{grid.DisplayName} storage null grid marked as managed by this block");
-                    storage = new MyModStorageComponent();
-                    grid.Storage = storage;
-                    storage.Add(Guid, blockId);
-                    isThisManager = true;
-                    continue;
-                }
-
-                string storedBlockId;
-                if (storage.ContainsKey(Guid))
-                {
-                    storedBlockId = storage[Guid];
-                }
-                else
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName} string parse failed, grid marked as managed by this block");
-                    storage.Add(Guid, blockId);
-                    isThisManager = true;
-                    continue;
-                }
-
-                if (storedBlockId == blockId)
-                {
-                    MyLog.Default.WriteLine($"{grid.DisplayName} blockId is equal, grid is managed by this block");
-                    isThisManager = true;
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(storedBlockId))
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName}stored string is empty, grid marked as managed by this block");
-                    storage.SetValue(Guid, blockId);
-                    isThisManager = true;
-                    continue;
-                }
-
-                long storedId;
-                if (!long.TryParse(storedBlockId, out storedId))
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName} parse to long failed, grid marked as managed by this block");
-                    storage.SetValue(Guid, blockId);
-                    isThisManager = true;
-                    continue;
-                }
-
-                IMyEntity entity;
-                if (MyAPIGateway.Entities.TryGetEntityById(storedId, out entity))
-                {
-                    if (hasSubscribed) continue;
-                    MyLog.Default.WriteLine($"{grid.DisplayName} grid is not managed by this block");
-                    entity.OnClose += OwnerBlock_OnMarkForClose;
-                    OtherManagerId = entity.EntityId.ToString();
-                    hasSubscribed = true;
-                }
-                else
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName} Other block was not found, grid marked as managed by this block");
-                    storage.SetValue(Guid, blockId);
-                    isThisManager = true;
-                }
-            }
-
-            return isThisManager;
-        }
-
-        private void OwnerBlock_OnMarkForClose(IMyEntity obj)
-        {
-            IsOnStandBy = false;
-            obj.OnClose -= OwnerBlock_OnMarkForClose;
-            if (!OverrideManagerBlock())
-            {
-                IsOnStandBy = true;
-                IsOtherManagerGone = false;
-                MyLog.Default.WriteLine("Trash Sorter could not start. Entering standby.");
-            }
-
-            IsOtherManagerGone = true;
-        }
+        private int Initialization_Step;
 
 
-        private bool OverrideManagerBlock()
-        {
-            var myCubeBlock = (IMyCubeBlock)Entity;
-            var blockId = myCubeBlock.EntityId.ToString();
-            var isThisManager = false;
-            var hasSubscribed = false;
-
-            // Retrieve connected grids
-            myCubeBlock.CubeGrid.GetGridGroup(GridLinkTypeEnum.Mechanical)?.GetGrids(connectedGrids);
-
-            MyLog.Default.WriteLine($"{connectedGrids.Count} Amount of grids overriding.");
-
-            foreach (var grid in connectedGrids)
-            {
-                // Synchronize access to the grid's storage
-                var storage = grid.Storage;
-
-                string storedBlockId;
-                storage.TryGetValue(Guid, out storedBlockId);
-
-                if (string.IsNullOrEmpty(storedBlockId))
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName}: Override manager on destruction, old {storedBlockId} grid marked as managed by block {myCubeBlock.EntityId}");
-
-                    // Assign the block as the manager with a timestamp or priority
-                    storage.SetValue(Guid, blockId);
-
-                    isThisManager = true;
-                    NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
-                    continue;
-                }
-
-                if (storedBlockId != blockId && storedBlockId == OtherManagerId)
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName}: Override manager on destruction, old {storedBlockId} grid marked as managed by block {myCubeBlock.EntityId}");
-
-                    // Assign the block as the manager with a timestamp or priority
-                    storage.SetValue(Guid, blockId);
-
-                    isThisManager = true;
-                    NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
-                    continue;
-                }
-
-                if (hasSubscribed) continue;
-
-                IMyEntity entity;
-                if (MyAPIGateway.Entities.TryGetEntityById(long.Parse(storedBlockId), out entity))
-                {
-                    if (entity.EntityId == Entity.EntityId) continue;
-
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName}: Override manager on destruction failed, grid is not managed by this block");
-                    entity.OnClose += OwnerBlock_OnMarkForClose;
-                    OtherManagerId = entity.EntityId.ToString();
-                    isThisManager = false;
-                    hasSubscribed = true;
-                }
-                else
-                {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName}: Override manager on destruction, grid is marked as managed by block");
-
-                    storage.SetValue(Guid, blockId);
-                    isThisManager = true;
-                }
-            }
-
-            return isThisManager;
-        }
+        // Storing files so GC won't sudo rm rf them.
+        private MainItemStorage _mainItemStorage;
+        private InventoryGridManager inventoryGridManager;
+        private ModSorterManager _modSorterMainManager;
+        private SorterChangeHandler sorterChangeHandler;
+        private TimeSpan totalInitTime;
 
 
-        private Main_Storage_Class.Main_Storage_Class _mainStorageClass;
-        private Inventory_Grid_Manager InventoryGridManager;
-
-        // ReSharper disable once NotAccessedField.Local
-        private ModConveyor_Sorter_Manager ModConveyorSorterManager;
-
+        // Initializing sequence. So far it takes around 80ms-200ms even on ultra large grids.
         public override void UpdateAfterSimulation10()
         {
             base.UpdateAfterSimulation10();
             switch (Initialization_Step)
             {
                 case 0:
-                    watch.Start();
-                    Logger.Instance.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    _mainStorageClass = new Main_Storage_Class.Main_Storage_Class();
+                    var wat1 = Stopwatch.StartNew();
+                    Logger.Log(ClassName, "Initializing step 1. Creating item storage.");
+                    _mainItemStorage = new MainItemStorage();
                     Initialization_Step++;
-                    watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Step 1. Time taken {watch.ElapsedMilliseconds}ms");
+                    wat1.Stop();
+                    totalInitTime += wat1.Elapsed;
+                    Logger.Log(ClassName, $"Step 1. Time taken {wat1.Elapsed.TotalMilliseconds}ms");
                     break;
 
                 case 1:
-                    watch.Start();
-                    Logger.Instance.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
-                    InventoryGridManager = new Inventory_Grid_Manager(_mainStorageClass, connectedGrids, gridOwner);
+                    var wat2 = Stopwatch.StartNew();
+                    Logger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
+                    inventoryGridManager = new InventoryGridManager(_mainItemStorage,
+                        GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock);
                     Initialization_Step++;
-                    watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Step 2. Time taken {watch.ElapsedMilliseconds}ms");
+                    wat2.Stop();
+                    totalInitTime += wat2.Elapsed;
+                    Logger.Log(ClassName, $"Step 2. Time taken {wat2.Elapsed.TotalMilliseconds}ms");
                     break;
                 case 2:
-                    watch.Start();
-                    Logger.Instance.Log(ClassName, "Initializing step 3. Starting trash sorter management.");
-                    ModConveyorSorterManager =
-                        new ModConveyor_Sorter_Manager(InventoryGridManager.TrashSorter, _mainStorageClass,InventoryGridManager);
-                    watch.Stop();
-                    Logger.Instance.Log(ClassName, $"Step 3. Time taken {watch.ElapsedMilliseconds}ms");
+                    var wat3 = Stopwatch.StartNew();
+                    Logger.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
+                    sorterChangeHandler = new SorterChangeHandler(_mainItemStorage);
+                    Initialization_Step++;
+                    wat3.Stop();
+                    totalInitTime += wat3.Elapsed;
+                    Logger.Log(ClassName, $"Step 3. Time taken {wat3.Elapsed.TotalMilliseconds}ms");
+                    break;
+                case 3:
+                    var wat4 = Stopwatch.StartNew();
+                    Logger.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
+                    _modSorterMainManager =
+                        new ModSorterManager(inventoryGridManager.ModSorters, _mainItemStorage,
+                            inventoryGridManager, sorterChangeHandler.SorterLimitManagers,
+                            _mainItemStorage.NameToDefinitionMap);
+                    wat4.Stop();
+                    totalInitTime += wat4.Elapsed;
+                    Logger.Log(ClassName, $"Step 4. Time taken {wat4.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Total init time. Time taken {totalInitTime.TotalMilliseconds}ms");
                     Initialization_Step++;
                     break;
             }
         }
 
+        // Logging/Comparison logic.
         public override void UpdateAfterSimulation100()
         {
             base.UpdateAfterSimulation100();
-            if (Initialization_Step <= 2) return;
+            if (Initialization_Step < 4) return;
 
-            InventoryGridManager.OnAfterSimulation100();
-            ModConveyorSorterManager.OnAfterSimulation100();
+            inventoryGridManager.OnAfterSimulation100();
+            _modSorterMainManager.OnAfterSimulation100();
+            sorterChangeHandler.OnAfterSimulation100();
         }
     }
 }
