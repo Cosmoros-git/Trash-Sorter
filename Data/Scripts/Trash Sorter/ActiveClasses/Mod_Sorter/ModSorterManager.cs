@@ -20,36 +20,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
     /// </summary>
     internal class ModSorterManager : ModBase
     {
-        /// <summary>
-        /// Collection of conveyor sorters.
-        /// </summary>
         public HashSet<IMyConveyorSorter> ModSorterCollection;
 
-        /// <summary>
-        /// Reference to the SorterDataStorage which holds sorter custom data.
-        /// </summary>
         public SorterDataStorage SorterDataStorageRef;
 
-        /// <summary>
-        /// Dictionary mapping item definitions to sorter limit managers.
-        /// </summary>
         public Dictionary<MyDefinitionId, SorterLimitManager> SorterLimitManagers;
 
-        /// <summary>
-        /// Dictionary for transforming names into MyDefinitionId objects.
-        /// </summary>
         private readonly Dictionary<string, MyDefinitionId> ItemNameToDefinitionMap;
 
         private readonly HashSet<IMyTerminalBlock> GuideHasBeenSet;
 
-        /// <summary>
-        /// Manages the inventory grid and provides event linking.
-        /// </summary>
         private readonly InventoryGridManager InventoryGridManager;
 
-        /// <summary>
-        /// Stopwatch to track operation time.
-        /// </summary>
         private readonly Stopwatch watch = new Stopwatch();
 
         /// <summary>
@@ -146,7 +128,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var data = SorterDataStorageRef.TrackChanges(sorter, out hasFilterTagBeenFound);
 
             Logger.Log(ClassName,
-                $"New entries {SorterDataStorageRef.AddedEntries.Count}, removed entries {SorterDataStorageRef.RemovedEntries.Count}, changed entries {SorterDataStorageRef.ChangedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
+                $"New entries {SorterDataStorageRef.AddedEntries.Count}, removed entries {SorterDataStorageRef.RemovedEntries.Count}, " +
+                $"changed entries {SorterDataStorageRef.ChangedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
 
             // Process the data only if the filter tag was found
             if (hasFilterTagBeenFound)
@@ -171,6 +154,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 foreach (var line in SorterDataStorageRef.AddedEntries)
                 {
                     string idString;
+                    if(string.IsNullOrWhiteSpace(line.Trim())) continue;
                     var newLine = ProcessNewLine(line, sorter, out idString);
 
                     // Lookup using dictionary for faster access
@@ -188,15 +172,21 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
                     // Lookup using dictionary for faster access
                     int index;
-                    if (defIdDictionary.TryGetValue(sorterChangedData.Key, out index))
+                    if (defIdDictionary.TryGetValue(sorterChangedData.Key.Trim(), out index))
                     {
                         data[index] = newLine;
+                        Logger.Log(ClassName, $"Index found {index} for line {newLine}");
+                    }
+                    else
+                    {
+                        Logger.LogError(ClassName, $"Index for changed {newLine} was not found");
                     }
                 }
             }
 
             // Rebuild custom data efficiently using StringBuilder
-            sorter.CustomData = UsingStringBuilder(data);
+            var processedString = UsingStringBuilder(data);
+            sorter.CustomData = processedString;
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
         }
 
@@ -205,7 +195,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             var sb = new StringBuilder();
             for (var i = 0; i < array.Count; i++)
             {
-                sb.Append(array[i]);
+                sb.Append(array[i]); // Keep original strings, including empty ones
+
                 if (i < array.Count - 1)
                 {
                     sb.Append("\r\n"); // Append new line after each element except the last one
@@ -221,6 +212,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         private double itemTriggerAmount;
 
         // Functions to process new/removed/edited lines. TODO MAYBE LOOK INTO OPTIMIZING THIS
+
         private string ProcessNewLine(string trimmedLine, IMyConveyorSorter sorter, out string idString)
         {
             var parts = trimmedLine.Split(new[] { '|' }, StringSplitOptions.None);
@@ -231,7 +223,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             {
                 Logger.Log(ClassName, $"String invalid {firstEntry}");
                 return
-                    $"// {firstEntry} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
+                    $"// {firstEntry} is not a valid identifier. Tag [guide] in name for all identifiers";
             }
 
             switch (parts.Length)
@@ -297,8 +289,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             MyDefinitionId definitionId;
             if (!ItemNameToDefinitionMap.TryGetValue(defId, out definitionId))
             {
-                return
-                    $"// {defId} is not a valid identifier. If you need all possible entries, add to sorter tag [GUIDE]";
+                Logger.LogError(ClassName, $"{defId} is not a valid identifier");
+                return $"// {defId} is not a valid identifier.";
             }
 
             // Parse the combined value into parts
@@ -362,11 +354,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 if (GuideHasBeenSet.Contains(obj)) GuideHasBeenSet.Remove(obj);
             }
 
-
+            GuideHasBeenSet.Add(obj);
             Logger.Log(ClassName, $"Sorter guide detected, {name}");
-            obj.CustomName = Regex.Replace(obj.CustomName, Regex.Escape(GuideCall), string.Empty,
-                RegexOptions.IgnoreCase);
-            obj.CustomData = ModSessionComponent.Guide_Data;
+            obj.CustomData = ModSessionComponent.GuideData;
             SorterDataStorageRef.AddOrUpdateSorterRawData((IMyConveyorSorter)obj);
         }
 

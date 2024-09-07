@@ -40,7 +40,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
         /// <summary>
         /// Guide data string used for generating user instructions.
         /// </summary>
-        public static string Guide_Data { get; private set; }
+        public static string GuideData { get; private set; }
 
         //  public Dictionary<MyDefinitionId, string> DefinitionToName;
         public static HashSet<MyDefinitionId> ProcessedItems;
@@ -144,10 +144,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
             }
         }
 
-        private void Create_All_Possible_Entries()
+        private static void Create_All_Possible_Entries()
         {
             var wat1 = Stopwatch.StartNew();
-            var stringBuilder = new StringBuilder(NameToDefinitionMap.Count * 20);
+            var stringBuilder = new StringBuilder(NameToDefinitionMap.Count * 50);
             const string separator = " | ";
             string lastType = null;
             stringBuilder.AppendLine("<Trash filter OFF>");
@@ -155,22 +155,27 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
             foreach (var name in NameToDefinitionMap)
             {
                 var currentType = name.Value.TypeId.ToString();
+
+                // Check if type changed and only append a single newline for separation
                 if (lastType != currentType)
                 {
-                    if (lastType != null) stringBuilder.AppendLine();
-                    stringBuilder.AppendLine($"// {currentType}");
+                    stringBuilder.AppendLine(); // Only one blank line when the type changes
+                    stringBuilder.AppendLine($"// {currentType}"); // Append type with one line before
                     stringBuilder.AppendLine();
+
                     lastType = currentType;
                 }
 
+                // Append the entry data with separator
                 stringBuilder.AppendLine($"{name.Key}{separator}0{separator}0");
             }
 
-            Guide_Data = stringBuilder.ToString();
+            GuideData = stringBuilder.ToString();
             wat1.Stop();
             Logger.Log("ModSessionComponent",
                 $"Creating all entries took {wat1.Elapsed.Milliseconds}ms, amount of entries sorters {NameToDefinitionMap.Count}");
         }
+
 
         private static void AddToDictionaries(MyDefinitionBase definition)
         {

@@ -100,10 +100,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <summary>
         /// Stopwatch for tracking execution time of operations.
         /// </summary>
-
         public readonly List<MyDefinitionId> RemovedEntries;
+
         public readonly List<string> AddedEntries;
         public readonly Dictionary<string, string> ChangedEntries;
+        private Dictionary<string, string> OldEntries;
 
         /// <summary>
         /// Initializes a new instance of the SorterDataStorage class and sets up the reference dictionary.
@@ -115,6 +116,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             ChangedEntries = new Dictionary<string, string>();
             AddedEntries = new List<string>();
             RemovedEntries = new List<MyDefinitionId>();
+            OldEntries = new Dictionary<string, string>();
         }
 
         /// <summary>
@@ -171,43 +173,58 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             AddedEntries.Clear();
             ChangedEntries.Clear();
 
+
+            Logger.Log(ClassName, "TrackChanges: Starting to track changes.");
+
+            // Load the new custom data and split by \r\n but preserve empty lines
             var newCustomData = sorter.CustomData;
+           // Logger.Log(ClassName, $"TrackChanges: Raw custom data received - {newCustomData}");
+
             var newCustomDataList = !string.IsNullOrEmpty(newCustomData)
-                ? new List<string>(newCustomData.Split(new[] { '\r', '\n' }, StringSplitOptions.None))
+                ? new List<string>(newCustomData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)) // Handle both Windows (\r\n) and Unix-style (\n) new lines
                 : new List<string>();
 
+            Logger.Log(ClassName, $"TrackChanges: Split custom data into {newCustomDataList.Count} lines.");
 
-            var newNonEmptyEntries = newCustomDataList
-                .Where(line => !string.IsNullOrWhiteSpace(line))
-                .ToList();
-
-            var startIndex = newNonEmptyEntries.FindIndex(line => line.Contains("<Trash filter ON>"));
+            // We still process valid entries, but we keep empty lines as they are
+            var startIndex = newCustomDataList.FindIndex(line => line.Contains("<Trash filter ON>"));
             if (startIndex == -1)
             {
+                Logger.Log(ClassName, "TrackChanges: '<Trash filter ON>' not found in the custom data.");
                 dataFound = false;
                 return newCustomDataList;
             }
 
             startIndex += 1;
+            Logger.Log(ClassName,
+                $"TrackChanges: Found '<Trash filter ON>' at line {startIndex - 1}. Processing from line {startIndex}.");
 
             SorterCustomData customDataAccess;
             if (!sorterDataDictionary.TryGetValue(sorter, out customDataAccess))
             {
-                dataFound = true;
-                return newCustomDataList;
+                Logger.Log(ClassName, "TrackChanges: No old data, entire string considered as new");
+                customDataAccess = sorterDataDictionary[sorter] = new SorterCustomData();
+                OldEntries = customDataAccess.ProcessedCustomData;
+            }
+            else
+            {
+                OldEntries = customDataAccess.ProcessedCustomData;
             }
 
-            var oldDataDictionary = customDataAccess.ProcessedCustomData;
+
+            Logger.Log(ClassName, $"TrackChanges: Found {OldEntries.Count} old entries in the data dictionary.");
+
             var newDataSet = newCustomDataList.Skip(startIndex).ToList();
             var newDataDictionary = new Dictionary<string, string>();
 
             foreach (var line in newDataSet)
             {
-                // Skip empty or whitespace-only lines
-                if (string.IsNullOrWhiteSpace(line)) continue;
-
-                // Skip commented lines
-                if (line.StartsWith("//")) continue;
+                // We preserve empty lines and skip only lines with comments
+                if (line.StartsWith("//"))
+                {
+                   // Logger.Log(ClassName, $"TrackChanges: Skipping comment line: {line}");
+                    continue;
+                }
 
                 var parts = line.Split('|').Select(part => part.Trim()).ToArray();
                 var keyValue = parts.Length == 0 ? line : parts[0]; // Treat the entire line as key if no separator
@@ -220,46 +237,47 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 value = value.Trim();
 
                 newDataDictionary[keyValue] = value;
+               // Logger.Log(ClassName, $"TrackChanges: Processed line - Key: {keyValue}, Value: {value}");
             }
 
             dataFound = true;
 
             // Track removed entries
-            foreach (var entry in oldDataDictionary.Keys)
+            foreach (var entry in OldEntries.Keys)
             {
-                if (!newDataDictionary.ContainsKey(entry))
-                {
-                    MyDefinitionId defId;
-                    if (ReferenceIdDictionary.TryGetValue(entry, out defId))
-                    {
-                        RemovedEntries.Add(defId);
-                    }
-                }
+                if (newDataDictionary.ContainsKey(entry)) continue;
+
+                MyDefinitionId defId;
+                if (!ReferenceIdDictionary.TryGetValue(entry, out defId)) continue;
+
+                RemovedEntries.Add(defId);
+               // Logger.Log(ClassName, $"TrackChanges: Entry removed - Key: {entry}");
             }
 
             // Track added entries
             foreach (var entry in newDataDictionary.Keys)
             {
-                if (!oldDataDictionary.ContainsKey(entry))
-                {
-                    AddedEntries.Add(entry + " | " + newDataDictionary[entry]);
-                }
+                if (OldEntries.ContainsKey(entry)) continue;
+
+                AddedEntries.Add(entry + " | " + newDataDictionary[entry]);
+                //Logger.Log(ClassName, $"TrackChanges: Entry added - Key: {entry}, Value: {newDataDictionary[entry]}");
             }
 
             // Track changed entries
-            foreach (var entry in oldDataDictionary.Keys)
+            foreach (var entry in OldEntries.Keys)
             {
                 string value;
                 if (!newDataDictionary.TryGetValue(entry, out value)) continue;
 
-                var oldValue = oldDataDictionary[entry];
+                var oldValue = OldEntries[entry];
                 var newValue = value.Trim();
 
                 // Compare normalized values to detect changes
-                if (!string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase))
-                {
-                    ChangedEntries.Add(entry, newValue);
-                }
+                if (string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase)) continue;
+
+                ChangedEntries.Add(entry, newValue);
+                Logger.Log(ClassName,
+                    $"TrackChanges: Entry changed - Key: {entry}, Old Value: {oldValue}, New Value: {newValue}");
             }
 
             // Update the processed custom data with the new entries
