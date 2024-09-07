@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sandbox.Game.Entities;
 using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI;
@@ -18,6 +19,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         public readonly HashSet<IMyCubeGrid> ConnectedToSystemGrid = new HashSet<IMyCubeGrid>();
         private readonly HashSet<IMyCubeGrid> NewConnectedToSystemGrids = new HashSet<IMyCubeGrid>();
 
+        // TODO REWRITE THIS ENTIRE MESS, AS I FOR SEEN THIS IS BAD.
 
         private bool IsOnline;
         private bool IsOnStandBy;
@@ -171,22 +173,29 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             IMyEntity otherManager;
             HashSet<IMyCubeGrid> managedGrids, notManagedGrids;
 
-            // Process the connected grids
+            // Process the connected grids post-merge
             ProcessConnectedGrids(out managedGrids, out notManagedGrids, out otherManager);
 
             // If no other manager is found, claim all grids
-            if (notManagedGrids.Count <= 0) return;
+            if (notManagedGrids.Count <= 0)
+            {
+                Logger.Log(ClassName, "Grid_OnGridMerge: No other manager found, claiming all grids.");
+                return;
+            }
 
-            // Check which grid is larger
+            // Check which grid is larger and decide who remains the manager
             if (IsNewGridLargerThanOld((MyCubeGrid)arg1, (MyCubeGrid)SystemGrid))
             {
-                // If the new grid is larger, transfer control to its manager
+                Logger.Log(ClassName, $"Grid_OnGridMerge: New merged grid {arg1.DisplayName} is larger, transferring control.");
+
+                // If the other manager exists, transfer control to the new larger grid's manager
                 if (otherManager != null)
                 {
-                    otherManager.OnMarkForClose += OwnerBlock_OnMarkForClose; // Transfer event handling to new manager
+                    otherManager.OnMarkForClose += OwnerBlock_OnMarkForClose;
+                    Logger.Log(ClassName, $"Grid_OnGridMerge: Subscribing to OnMarkForClose for {otherManager.DisplayName}");
                 }
 
-                // Dispose of current manager and relinquish control over the grids
+                // Dispose of the current manager and relinquish control over the grids
                 foreach (var grid in managedGrids)
                 {
                     OnGridDispose(grid);
@@ -195,15 +204,33 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             }
             else
             {
-                // No other manager or this grid is larger; claim the previously not managed grids
+                // No other manager or this grid is larger, claim the previously unmanaged grids
+                Logger.Log(ClassName, $"Grid_OnGridMerge: This grid remains the manager, claiming unmanaged grids.");
+
                 foreach (var grid in notManagedGrids)
                 {
                     grid.Storage.Add(Guid, SystemBlockId);
                 }
             }
 
-            // Finally, re-verify the block's status after merge
+            // After merge, ensure all blocks and grids are valid and clean up stale references
             VerifyBlock();
+            RemoveInvalidBlocksOrGrids();
+        }
+
+        // Method to clean up stale or invalid references to blocks and grids
+        private void RemoveInvalidBlocksOrGrids()
+        {
+            Logger.Log(ClassName, "RemoveInvalidBlocksOrGrids: Starting cleanup of invalid blocks or grids.");
+
+            foreach (var grid in ConnectedToSystemGrid.ToList())
+            {
+                if (grid != null && !grid.MarkedForClose && grid.Physics != null) continue;
+
+                Logger.Log(ClassName, $"RemoveInvalidBlocksOrGrids: Removing stale or invalid grid {grid?.DisplayName}");
+                ConnectedToSystemGrid.Remove(grid);
+                OnGridDispose(grid);
+            }
         }
 
 
@@ -363,15 +390,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 if (MyAPIGateway.Entities.TryGetEntityById(storedId, out entity))
                 {
                     if (hasSubscribed) continue;
-                    MyLog.Default.WriteLine($"{grid.DisplayName} grid is not managed by this block");
                     entity.OnClose += OwnerBlock_OnMarkForClose;
                     OtherManagerId = entity.EntityId.ToString();
+                    MyLog.Default.WriteLine($"{grid.DisplayName} grid is not managed by this block, managing block id {OtherManagerId}");
                     hasSubscribed = true;
                 }
                 else
                 {
-                    MyLog.Default.WriteLine(
-                        $"{grid.DisplayName} Other block was not found, grid marked as managed by this block");
+                    MyLog.Default.WriteLine($"{grid.DisplayName} Other block was not found, grid marked as managed by this block");
                     storage.SetValue(Guid, SystemBlockId);
                     isThisManager = true;
                 }
@@ -382,7 +408,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private void OwnerBlock_OnMarkForClose(IMyEntity obj)
         {
+           
             IsOnStandBy = false;
+            if (obj == null)
+            {
+                Logger.LogError(ClassName,"This is really bad. Manager block is null. We are having a phantom block situation.");
+                VerifyBlock();
+                return;
+               
+            }
             obj.OnClose -= OwnerBlock_OnMarkForClose;
             if (!OverrideManagerBlock())
             {
@@ -468,6 +502,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private void Block_OnMarkForClose(IMyEntity obj)
         {
+            if(obj==null) return;
             // Moved entire dispose into earlier method to be sure it does its job.
             obj.OnClosing -= Block_OnMarkForClose;
             OnNeedsUpdate(MyEntityUpdateEnum.NONE);

@@ -9,6 +9,7 @@ using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
 using VRage.Game;
+using VRageMath;
 using IMyConveyorSorter = Sandbox.ModAPI.IMyConveyorSorter;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
 
@@ -154,7 +155,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 foreach (var line in SorterDataStorageRef.AddedEntries)
                 {
                     string idString;
-                    if(string.IsNullOrWhiteSpace(line.Trim())) continue;
+                    if(string.IsNullOrEmpty(line.Trim())) continue;
                     var newLine = ProcessNewLine(line, sorter, out idString);
 
                     // Lookup using dictionary for faster access

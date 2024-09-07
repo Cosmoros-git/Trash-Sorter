@@ -26,45 +26,58 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         // Deals with adding conveyor sorters with values. Empty values never used.
         public void RegisterSorter(IMyConveyorSorter sorter, double itemRequestAmount, double itemTriggerAmount)
         {
+            Logger.Log("SorterLimitManager", $"RegisterSorter: Registering sorter {sorter.CustomName} with Request Amount: {itemRequestAmount} and Trigger Amount: {itemTriggerAmount}");
+
             SorterItemLimits[sorter] = new[] { (MyFixedPoint)itemRequestAmount, (MyFixedPoint)itemTriggerAmount, 0 };
             sorter.OnClosing += Sorter_OnClosing;
+
             OnValueChange();
         }
 
         public void UnRegisterSorter(IMyConveyorSorter sorter)
         {
+            Logger.Log("SorterLimitManager", $"UnRegisterSorter: Unregistering sorter {sorter.CustomName}");
+
             SorterItemLimits.Remove(sorter);
             sorter.RemoveItem(DefinitionId);
         }
 
-        public void ChangeLimitsOnSorter(IMyConveyorSorter sorter, double itemRequestedAmount,
-            double itemTriggerAmount)
+        public void ChangeLimitsOnSorter(IMyConveyorSorter sorter, double itemRequestedAmount, double itemTriggerAmount)
         {
+            Logger.Log("SorterLimitManager", $"ChangeLimitsOnSorter: Changing limits on sorter {sorter.CustomName} to Requested Amount: {itemRequestedAmount} and Trigger Amount: {itemTriggerAmount}");
+
             MyFixedPoint[] limits;
-            if (!SorterItemLimits.TryGetValue(sorter, out limits)) return;
+            if (!SorterItemLimits.TryGetValue(sorter, out limits))
+            {
+                Logger.Log("SorterLimitManager", $"ChangeLimitsOnSorter: Sorter {sorter.CustomName} not found in SorterItemLimits");
+                return;
+            }
+
             limits[0] = (MyFixedPoint)itemRequestedAmount;
             limits[1] = (MyFixedPoint)itemTriggerAmount;
             limits[2] = 0;
+
             OnValueChange();
         }
 
         private void Sorter_OnClosing(VRage.ModAPI.IMyEntity obj)
         {
+            Logger.Log("SorterLimitManager", $"Sorter_OnClosing: Sorter {(obj as IMyConveyorSorter)?.CustomName} is closing");
+
             obj.OnClosing -= Sorter_OnClosing;
             SorterItemLimits.Remove((IMyConveyorSorter)obj);
         }
-
 
         private void HandleFilterStorageChange(IMyConveyorSorter sorter, bool exceeded)
         {
             if (exceeded)
             {
-                Logger.Log("SorterLimitManager", $"{DefinitionId.SubtypeName} added");
+                Logger.LogWarning("SorterLimitManager", $"{DefinitionId.SubtypeName} added to sorter {sorter.CustomName}");
                 sorter.AddItem(DefinitionId);
             }
             else
             {
-                Logger.Log("SorterLimitManager", $"{DefinitionId.SubtypeName} removed");
+                Logger.LogWarning("SorterLimitManager", $"{DefinitionId.SubtypeName} removed from sorter {sorter.CustomName}");
                 sorter.RemoveItem(DefinitionId);
             }
         }
@@ -72,28 +85,30 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         // Logic behind filters setting on items amount changes.
         public void OnValueChange()
         {
-            //Limit 0 = itemRequestAmount
-            //Limit 1 = itemTriggerAmount
-            //Limit 2 = Bool sort of 0/1 true.
+            Logger.Log("SorterLimitManager", "OnValueChange: Checking item amounts and sorter limits.");
 
             foreach (var kvp in SorterItemLimits)
             {
                 var limit = kvp.Value;
                 var sorter = kvp.Key;
 
-                // Log initial state
+                Logger.Log("SorterLimitManager", $"OnValueChange: Item {DefinitionId.SubtypeName} - Requested Amount: {limit[0]}, Trigger Amount: {limit[1]}, OverLimitFlag: {limit[2]}");
+
+                // Log current item amount for comparison
+                Logger.Log("SorterLimitManager", $"OnValueChange: ItemAmount: {ItemAmountRef.ItemAmount}");
+
                 // Case 1: Value exceeds the trigger amount, we need to add the item to the filter.
                 if (ItemAmountRef.ItemAmount > limit[0])
                 {
-
-                    if (limit[2]==1)
+                    if (limit[2] == 1)
                     {
-                        // Already over limit, skip further updates.
+                        Logger.Log("SorterLimitManager", $"OnValueChange:  Item {DefinitionId.SubtypeName} - Already over limit, skipping update.");
                         continue;
                     }
 
                     // Setting OverLimitTrigger to true and adding the item to the filter.
-                    limit[2]= 1;
+                    limit[2] = 1;
+                    Logger.Log("SorterLimitManager", $"OnValueChange:  Item {DefinitionId.SubtypeName} - Exceeded limit, adding item.");
                     HandleFilterStorageChange(sorter, true);
                     continue;
                 }
@@ -101,31 +116,34 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 // Case 2: Value is within the requested amount range, no filter change needed.
                 if (ItemAmountRef.ItemAmount > limit[0])
                 {
-                    // Value is within acceptable limits, no need to add or remove items.
+                    Logger.Log("SorterLimitManager", $"OnValueChange:  Item  {DefinitionId.SubtypeName} - Item amount within acceptable limits, no action taken.");
                     continue;
                 }
 
                 // Case 3: Value dropped below the requested amount, we need to remove the item from the filter.
-                if (limit[2]!=1)
+                if (limit[2] != 1)
                 {
-                    // The item has already been removed, no further action required.
+                    Logger.Log("SorterLimitManager", $"OnValueChange:  Item  {DefinitionId.SubtypeName} - Item already removed from filter, no action needed.");
                     continue;
                 }
 
                 // Reset the flag and remove the item from the filter.
                 limit[2] = 0;
+                Logger.Log("SorterLimitManager", $"OnValueChange:  Item  {DefinitionId.SubtypeName} - Dropped below requested amount, removing item.");
                 HandleFilterStorageChange(sorter, false);
             }
         }
 
-
         public override void Dispose()
         {
-            foreach (var sorter in
-                     SorterItemLimits.Keys.ToList()) // Use ToList() to avoid potential modification issues
+            Logger.Log("SorterLimitManager", "Dispose: Cleaning up sorter references.");
+
+            foreach (var sorter in SorterItemLimits.Keys.ToList()) // Use ToList() to avoid potential modification issues
             {
+                Logger.Log("SorterLimitManager", $"Dispose: Unsubscribing sorter {sorter.CustomName} from OnClosing event.");
                 sorter.OnClosing -= Sorter_OnClosing;
             }
         }
+
     }
 }
