@@ -41,7 +41,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
     public class MainClass : MyGameLogicComponent
     {
         private const string ClassName = "Main-Class";
-        public GridSystemOwner GridSystemOwner;
+        public GridSystemOwnerV2 GridSystemOwner;
         private bool isSubbed;
 
 
@@ -65,7 +65,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
             NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
             Logger.Log("MainClass", "Trash Sorter starting up");
-            GridSystemOwner = new GridSystemOwner(Entity);
+            GridSystemOwner = new GridSystemOwnerV2(Entity);
 
             GridSystemOwner.NeedsUpdate += GridSystemOwnerCallback_NeedsUpdate;
             GridSystemOwner.DisposeInvoke += GridSystemOwnerCallback_DisposeInvoke;
@@ -120,7 +120,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     var wat2 = Stopwatch.StartNew();
                     Logger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
                     inventoryGridManager = new InventoryGridManager(_mainItemStorage,
-                        GridSystemOwner.ConnectedToSystemGrid, GridSystemOwner.SystemGrid, GridSystemOwner.SystemBlock);
+                        GridSystemOwner.ManagedGrids);
                     Initialization_Step++;
                     wat2.Stop();
                     totalInitTime += wat2.Elapsed;
@@ -157,7 +157,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             base.UpdateAfterSimulation100();
             if (Initialization_Step < 4) return;
 
-            inventoryGridManager.OnAfterSimulation100();
             _modSorterMainManager.OnAfterSimulation100();
             sorterChangeHandler.OnAfterSimulation100();
         }

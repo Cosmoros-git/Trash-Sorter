@@ -24,7 +24,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
             return obj.Replace(" ", "").Trim().ToLowerInvariant().GetHashCode();
         }
 
-        public ObservableDictionary() { } // The fact I need this to just create empty one is kinda kekw.
+        public ObservableDictionary() { } // The fact I need this to just create empty one is kinda kek.
 
         public ObservableDictionary(Dictionary<TKey, FixedPointReference> toDictionary)
         {

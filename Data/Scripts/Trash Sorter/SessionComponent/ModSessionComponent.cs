@@ -6,9 +6,10 @@ using VRage.Utils;
 using VRage.Game;
 using VRage.Game.Components;
 using Sandbox.Definitions;
-using Sandbox.ModAPI;
 using System.Diagnostics;
 using System.Text;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
 {
@@ -23,7 +24,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
         public static event Action AllowInitialization;
         public static bool IsInitializationAllowed { get; private set; }
 
-
         public override void UpdateAfterSimulation()
         {
             base.UpdateAfterSimulation();
@@ -34,25 +34,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
 
         public static ModSessionComponent Instance { get; private set; }
 
-
-        public static Dictionary<string, MyDefinitionId> NameToDefinitionMap;
-
-        /// <summary>
-        /// Guide data string used for generating user instructions.
-        /// </summary>
         public static string GuideData { get; private set; }
 
-        //  public Dictionary<MyDefinitionId, string> DefinitionToName;
-        public static HashSet<MyDefinitionId> ProcessedItems;
-
-        //  public HashSet<string> ProcessedItemsNames;
-
-        public static ObservableDictionary<MyDefinitionId> ItemsDictionaryReference { get; private set; }
-
-        public override void BeforeStart()
-        {
-            MyLog.Default.WriteLine("ModSessionComponent: BeforeStart called.");
-        }
+        public static Dictionary<string, MyDefinitionId> NameToDefinitionMap { get; private set; }
+        public static HashSet<MyDefinitionId> ProcessedItemsDefinitions { get; private set; }
+        public static ObservableDictionary<MyDefinitionId> ItemStorageReference { get; private set; }
 
         public override void LoadData()
         {
@@ -65,11 +51,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
         public void Init()
         {
             NameToDefinitionMap = new Dictionary<string, MyDefinitionId>();
-            ProcessedItems = new HashSet<MyDefinitionId>();
-            ItemsDictionaryReference = new ObservableDictionary<MyDefinitionId>();
+            ProcessedItemsDefinitions = new HashSet<MyDefinitionId>();
+            ItemStorageReference = new ObservableDictionary<MyDefinitionId>();
             GetDefinitions();
-            Create_All_Possible_Entries();
+            CreateGuideEntries();
         }
+
+
 
         public void GetDefinitions()
         {
@@ -143,8 +131,16 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
                 Logger.Log("ModSessionComponent", $"all definitions failed {ex}");
             }
         }
+        private static void AddToDictionaries(MyDefinitionBase definition)
+        {
+            var name = definition.DisplayNameText;
 
-        private static void Create_All_Possible_Entries()
+            NameToDefinitionMap[name] = definition.Id;
+            ItemStorageReference[definition.Id] = new FixedPointReference(0);
+            ProcessedItemsDefinitions.Add(definition.Id);
+        }
+
+        private static void CreateGuideEntries()
         {
             var wat1 = Stopwatch.StartNew();
             var stringBuilder = new StringBuilder(NameToDefinitionMap.Count * 50);
@@ -177,13 +173,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
         }
 
 
-        private static void AddToDictionaries(MyDefinitionBase definition)
-        {
-            var name = definition.DisplayNameText;
 
-            NameToDefinitionMap[name] = definition.Id;
-            ItemsDictionaryReference[definition.Id] = new FixedPointReference(0);
-            ProcessedItems.Add(definition.Id);
-        }
     }
 }

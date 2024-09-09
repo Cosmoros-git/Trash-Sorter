@@ -3,13 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using Sandbox.ModAPI.Ingame;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
 using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
 using VRage.Game;
-using VRageMath;
 using IMyConveyorSorter = Sandbox.ModAPI.IMyConveyorSorter;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
 

@@ -32,9 +32,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
         public MainItemStorage()
         {
             NameToDefinitionMap = new Dictionary<string, MyDefinitionId>(ModSessionComponent.NameToDefinitionMap);
-            ItemsDictionary = new ObservableDictionary<MyDefinitionId>(new Dictionary<MyDefinitionId, FixedPointReference>(ModSessionComponent.ItemsDictionaryReference));
+            ItemsDictionary = new ObservableDictionary<MyDefinitionId>(new Dictionary<MyDefinitionId, FixedPointReference>(ModSessionComponent.ItemStorageReference));
             Logger.Log(ClassName,$"Amount of items in dictionary {ItemsDictionary.Count}");
-            ProcessedItems = new HashSet<MyDefinitionId>(ModSessionComponent.ProcessedItems);
+            ProcessedItems = new HashSet<MyDefinitionId>(ModSessionComponent.ProcessedItemsDefinitions);
             Logger.Log(ClassName, "Item storage created");
         }
     }
