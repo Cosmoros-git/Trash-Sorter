@@ -106,33 +106,53 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         public void UpdateOnceBeforeFrame()
         {
-            // If initialization was done and this is called once more. 
-            if (SystemOnline()) return;
+            MyLog.Default.WriteLine("UpdateOnceBeforeFrame: Starting update.");
 
-            // Basic block verification. Mostly for in-case of grid being copied. Is short circuited.
-            if (!BasicLevelBlockVerified || BasicBlockVerification()) return;
-
-
-            if (InitializeManager())
+            // If the system is already online, skip further processing
+            if (SystemOnline())
             {
-                // If the block was successfully verified, start regular updates
-                MyLog.Default.WriteLine("Trash Sorter startup finished");
-                OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME |
-                              MyEntityUpdateEnum.EACH_100TH_FRAME);
+                Logger.LogError(ClassName, "UpdateOnceBeforeFrame: System is already online, skipping.");
                 return;
             }
 
+            // Perform basic block verification
+            if (!BasicLevelBlockVerified)
+            {
+                BasicBlockVerification();
+                if (!BasicLevelBlockVerified)
+                {
+                    OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
+                    return;
+                }
+
+                Logger.Log(ClassName, "Block has been verified, proceeding");
+            }
+
+            // Try to initialize the manager
+            if (InitializeManager())
+            {
+                Logger.Log(ClassName,
+                    "UpdateOnceBeforeFrame: Manager initialization successful. Starting regular updates.");
+
+                // If the block was successfully verified, start regular updates
+                Logger.Log(ClassName, "Trash Sorter startup finished");
+                OnNeedsUpdate(MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME);
+                return;
+            }
+
+            // If the block is not initialized but we're not in standby mode, retry next frame
             if (!IsOnStandBy)
             {
-                // If the block is not verified, and we're not on standby, retry next frame
+                Logger.LogError(ClassName,
+                    "UpdateOnceBeforeFrame: Manager initialization failed. Retrying next frame.");
                 OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
                 return;
             }
 
-            // If we fail to verify after retrying, enter standby mode
-            MyLog.Default.WriteLine("Trash Sorter could not start. Entering stand-by.");
+            Logger.LogError(ClassName, "Trash Sorter could not start. Entering stand-by.");
             OnNeedsUpdate(MyEntityUpdateEnum.NONE);
             Dispose();
+            Logger.LogError(ClassName, "UpdateOnceBeforeFrame: System disposed and now in standby mode.");
         }
 
 
@@ -147,49 +167,63 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             return true;
         }
 
-        private byte CurrentUpdate;
-        private const byte UpdateCooldown = 60;
+        private int CurrentUpdate;
+        private const int UpdateCooldown = 2000;
 
         // Basic level block checks.
-        private bool BasicBlockVerification()
+        private void BasicBlockVerification()
         {
+            Logger.Log(ClassName, "BasicBlockVerification: Starting check...");
+
+            // Check if already verified
+            if (BasicLevelBlockVerified)
+            {
+                Logger.Log(ClassName, "BasicBlockVerification: Block is already verified, skipping.");
+                return; // It's already verified, no need to check again
+            }
+
             // Check if the update should be skipped based on the cooldown
-            if (++CurrentUpdate % UpdateCooldown != 0)
-                return false;
+
+            if (CurrentUpdate % UpdateCooldown != 0) return;
+            CurrentUpdate++;
 
             // Reset the update counter
+            Logger.Log(ClassName, $"BasicBlockVerification: Cooldown reached trying again.");
             CurrentUpdate = 0;
 
             // Check if the SystemBlock and its CubeGrid are valid
             if (SystemManagerBlock?.CubeGrid == null)
             {
-                Logger.LogError(ClassName,
-                    SystemManagerBlock == null ? "SystemBlock is not a valid IMyCubeBlock." : "CubeGrid is null.");
-                return false;
+                var errorMessage = SystemManagerBlock == null
+                    ? "SystemBlock is not a valid IMyCubeBlock."
+                    : "CubeGrid is null.";
+                Logger.LogError(ClassName, $"BasicBlockVerification: {errorMessage}");
+                OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
+                return;
             }
 
             // Check if the CubeGrid has physics enabled
             if (SystemManagerBlock.CubeGrid.Physics != null)
             {
+                Logger.Log(ClassName, "BasicBlockVerification: Physics is enabled. Verification successful.");
                 BasicLevelBlockVerified = true;
-                OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
-                return true;
+                return;
             }
 
             // Handle the case where physics is null and log only once
-            if (HasPhysicsErrorBeenShown) return false;
+            if (HasPhysicsErrorBeenShown) return;
+
+
+            Logger.LogError(ClassName, "BasicBlockVerification: Physics is null, waiting.");
             OnNeedsUpdate(MyEntityUpdateEnum.BEFORE_NEXT_FRAME);
-
             HasPhysicsErrorBeenShown = true;
-            Logger.LogError(ClassName, "Physics is null.");
-
-            return false;
         }
+
 
         private bool InitializeManager()
         {
             Logger.Log(ClassName, "Trash Sorter instance starting up");
-            SystemManagerBlock.OnMarkForClose += ManagerBlock_OnMarkForClose;
+            SystemEntity.OnMarkForClose += ManagerBlock_OnMarkForClose;
 
             // Check if GridManagement passes
             if (!GridManagerSetup()) return false;
@@ -220,22 +254,25 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 out connectedGrids);
             if (notManagedGrids.Count > 0)
             {
-                if (IsThisManager(notManagedGrids.Count, ManagedGrids.Count))
+                if (IsThisManager(notManagedGrids.Count, managedGrids.Count))
+                {
+                    SubscribeGrids(connectedGrids);
+                    return true;
+                }
+
+                if (OtherSystemManager == null)
                 {
                     SubscribeGrids(notManagedGrids);
                     return true;
                 }
-            }
-            else
-            {
-                SubscribeGrids(connectedGrids);
-                return true;
+
+                UnsubscribeGrids(managedGrids);
+                EnterStandbyMode();
+                return false;
             }
 
-
-            UnsubscribeGrids(managedGrids);
-            EnterStandbyMode();
-            return false;
+            SubscribeGrids(connectedGrids);
+            return true;
             // Process each grid in the connected system
         }
 
@@ -304,8 +341,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-
-
         private void ProcessConnectedGrids(IMyCubeGrid referenceGrid, out HashSet<IMyCubeGrid> managedGrids,
             out HashSet<IMyCubeGrid> notManagedGrids, out HashSet<IMyCubeGrid> connectedGrids)
         {
@@ -355,8 +390,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-
-
         private bool OverrideManagerBlock()
         {
             HashSet<IMyCubeGrid> notManagedGrids, managedGrids, connectedGrids;
@@ -371,9 +404,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                 {
                     if (grid.Storage == null)
                     {
-                        var storage = new MyModStorageComponent();
-                        grid.Storage = storage;
-                        storage.SetValue(Guid,"");
+                        grid.Storage = new MyModStorageComponent();
+                        grid.Storage.SetValue(Guid, SystemManagerStringId);
                         continue;
                     }
 
@@ -384,7 +416,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
                     // If the stored manager ID is different from the one we expect
                     if (currentManagerStringId == OtherSystemManagerStringId) continue;
 
-                    Logger.Log(ClassName, $"{grid.DisplayName} managed by different system ({currentManagerStringId}). Entering standby.");
+                    Logger.Log(ClassName,
+                        $"{grid.DisplayName} managed by different system ({currentManagerStringId}). Entering standby.");
                     EnterStandbyMode();
                     UnsubscribeGrids(managedGrids);
                     return false; // Stop further processing as we're not the manager
@@ -402,7 +435,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
         private void SubscribeOtherManager(IMyEntity otherManager)
         {
-            foreach (var manager in OtherManagerSubscribes)
+            if (otherManager == null) return;
+            foreach (var manager in OtherManagerSubscribes.ToList())
             {
                 if (manager.EntityId != otherManager.EntityId)
                 {
@@ -415,8 +449,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         }
 
 
-
-
         private void TryClaimingGrid(IMyCubeGrid grid, out long storedId)
         {
             var storage = grid.Storage;
@@ -424,9 +456,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             if (storage == null)
             {
                 Logger.Log(ClassName, $"{grid.DisplayName} storage null grid marked as managed by this block");
-                storage = new MyModStorageComponent();
-                grid.Storage = storage;
-                storage.Add(Guid, SystemManagerStringId);
+                grid.Storage = new MyModStorageComponent();
+                grid.Storage.SetValue(Guid, SystemManagerStringId);
                 return;
             }
 
@@ -462,7 +493,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
             Logger.Log(ClassName, $"{grid.DisplayName} parse to long failed, grid marked as managed by this block");
             storage.SetValue(Guid, SystemManagerStringId);
-            
         }
 
         private bool GetOtherManagerById(long entityId)
@@ -521,6 +551,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             grid.OnClosing += Grid_OnClosing;
             grid.OnGridSplit += Grid_OnGridSplit;
             grid.OnGridMerge += Grid_OnGridMerge;
+            if (grid.Storage == null)
+            {
+                grid.Storage = new MyModStorageComponent();
+            }
             grid.Storage.SetValue(Guid, SystemManagerStringId);
             ManagedGrids.Add(grid);
             OnGridAdded(grid);
@@ -533,7 +567,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             // Moved entire dispose into earlier method to be sure it does its job.
             obj.OnClosing -= ManagerBlock_OnMarkForClose;
 
-            foreach (var grid in ManagedGrids)
+            foreach (var grid in ManagedGrids.ToList())
             {
                 var storage = grid.Storage;
                 string value;
@@ -582,12 +616,18 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         {
             base.Dispose();
             OnDisposeInvoke();
-            foreach (var grid in ManagedGrids)
+            foreach (var grid in ManagedGrids.ToList())
             {
                 Grid_OnClosing(grid);
             }
 
-            OtherSystemManager.OnMarkForClose -= OtherSystemManager_OnMarkForClose;
+            foreach (var manager in OtherManagerSubscribes.ToList())
+            {
+                if (manager != null) manager.OnMarkForClose -= OtherSystemManager_OnMarkForClose;
+            }
+
+            SystemEntity = null;
+            OtherSystemManager = null;
         }
     }
 }

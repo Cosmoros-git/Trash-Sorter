@@ -30,8 +30,8 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         /// <summary>
         /// Set of cube grids managed by the inventory grid manager. Used for removing events and handling grid logic.
         /// </summary>
-        public HashSet<IMyCubeGrid> ManagedGrids;
-
+        public readonly HashSet<IMyCubeGrid> ManagedGridsRef;
+        private readonly HashSet<IMyCubeGrid> ManagedGridsLocal;
         /// <summary>
         /// Event triggered when a modded conveyor sorter is added. 
         /// Subscribed by the ModConveyorManager.
@@ -78,7 +78,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             HashSet<IMyCubeGrid> managedGrids)
         {
             Logger.Log(ClassName, "Started Inventory Grid manager");
-            ManagedGrids = managedGrids;
+            ManagedGridsLocal = new HashSet<IMyCubeGrid>();
+            ManagedGridsRef = managedGrids;
+            
             _mainsItemStorage = mainItemStorage;
             ProcessedIds = mainItemStorage.ProcessedItems;
 
@@ -91,11 +93,15 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
         private void Get_All_Inventories()
         {
             var wat1 = Stopwatch.StartNew();
-            Logger.Log(ClassName, $"Grids to count {ManagedGrids.Count}");
+            var wat2 = new Stopwatch();
+            Logger.Log(ClassName, $"Grids to count {ManagedGridsRef.Count}");
 
-            foreach (var myGrid in ManagedGrids)
+            foreach (var myGrid in ManagedGridsRef)
             {
+                wat2.Restart();
                 AddGridToSystem(myGrid);
+                wat2.Stop();
+                Logger.Log(ClassName,$"{myGrid.CustomName} took {wat2.Elapsed.TotalMilliseconds}ms");
             }
 
             wat1.Stop();
@@ -105,6 +111,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
         private void RemoveGridFromSystem(IMyCubeGrid grid)
         {
+            if (!ManagedGridsLocal.Contains(grid)) return;
             Logger.Log(ClassName, $"Grid {grid.DisplayName} is being removed.");
 
             Grid_Unsubscribe((MyCubeGrid)grid);
@@ -120,22 +127,28 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
 
         private void AddGridToSystem(IMyCubeGrid grid)
         {
+           
+            if (ManagedGridsLocal.Contains(grid))
+            {
+                Logger.Log(ClassName, $"Grid already subscribed {grid.CustomName}");
+                return;
+            } // Skip if already managed
+            Logger.Log(ClassName, $"Subscribing to the grid {grid.CustomName}");
             var blocks = grid.GetFatBlocks<IMyTerminalBlock>().ToHashSet();
-            Grid_Subscribe((MyCubeGrid)grid);
             FatBlockSorter(blocks);
+            Grid_Subscribe((MyCubeGrid)grid);
         }
 
         private void FatBlockSorter(HashSet<IMyTerminalBlock> blocks)
         {
+            Logger.Log(ClassName, $"Amount of blocks to count {blocks.Count}");
+
             foreach (var block in blocks)
             {
-                if (TrackedBlocks.Contains(block)) return;
+                if (TrackedBlocks.Contains(block)) continue;
 
                 // Skip blocks with no inventories
-                if (block.InventoryCount <= 0)
-                {
-                    continue;
-                }
+                if (block.InventoryCount <= 0) continue;
 
                 // Add block if it can use the conveyor system
                 if (CanUseConveyorSystem(block))
@@ -152,16 +165,14 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
                     continue;
                 }
 
-                // Subscribe to block events
-                block.OnClosing += Block_OnClosing;
-                block.CustomNameChanged += Terminal_CustomNameChanged;
-
+                // If the block is part of trash inventory
                 if (IsTrashInventory(block))
                 {
                     TrashBlocks.Add(block);
                     continue;
                 }
 
+                // Add inventories for the block
                 for (var i = 0; i < block.InventoryCount; i++)
                 {
                     Add_Inventory((MyInventory)block.GetInventory(i));
@@ -169,13 +180,21 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             }
         }
 
+
+
         // Log for when a grid is added
         private void Grid_Subscribe(MyCubeGrid myGrid)
         {
             Logger.Log(ClassName, $"Grid_Add: Adding grid {myGrid.DisplayName}");
 
+            if (ManagedGridsLocal.Contains(myGrid))
+            {
+                Logger.Log(ClassName, $"Grid {myGrid.DisplayName} is already subscribed.");
+                return;
+            }
+
             myGrid.OnFatBlockAdded += FatGrid_OnFatBlockAdded;
-            ManagedGrids.Add(myGrid);
+            ManagedGridsLocal.Add(myGrid);
         }
 
         private void Grid_Unsubscribe(MyCubeGrid myGrid)
@@ -183,7 +202,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             Logger.Log(ClassName, $"Grid_Remove: Removing grid {myGrid.DisplayName}");
 
             myGrid.OnFatBlockAdded -= FatGrid_OnFatBlockAdded;
-            ManagedGrids.Remove(myGrid);
+            ManagedGridsLocal.Remove(myGrid);
         }
 
         private void FatGrid_OnFatBlockAdded(MyCubeBlock obj)
@@ -330,12 +349,12 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses
             GridAdd -= AddGridToSystem;
             GridDispose -= RemoveGridFromSystem;
 
-            foreach (var grid in ManagedGrids)
+            foreach (var grid in ManagedGridsLocal.ToList())
             {
                 RemoveGridFromSystem(grid);
             }
 
-            foreach (var block in TrackedBlocks)
+            foreach (var block in TrackedBlocks.ToList())
             {
                 Block_OnClosing(block);
             }
