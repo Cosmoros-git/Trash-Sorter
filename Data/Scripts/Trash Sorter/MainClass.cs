@@ -1,49 +1,26 @@
 ﻿using System;
 using System.Diagnostics;
 using Sandbox.Common.ObjectBuilders;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
+using Trash_Sorter.GridManagerRewritten;
+using Trash_Sorter.GridManagers;
+using Trash_Sorter.SorterClasses;
+using Trash_Sorter.StaticComponents;
+using Trash_Sorter.StorageClasses;
 using VRage.Game.Components;
+using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter
+namespace Trash_Sorter
 {
-    /* What mod has to do. Sort "trash" with trash sorter out of inventories
-     * Classes needed for that
-     * Main -> Initialize the mod and create other class instances
-     * Logger -> Deals with logging shit in a readable manner.
-     *
-     *
-     * Grid scanner -> Scans the grid for blocks and deals with state changes.
-     *
-     * Storage -> Stores amount of items and deals with removing storage items from the item list or adding them.
-     * Storage also gets all the definitions of the items its going to store.
-     * Only items out of interested definitions are to be tracked.
-     *
-     *
-     * Sorter Manager -> Manager sorter filters.
-     * Also makes sure those filters are not being reset by people breaking the system.
-     *
-     * Custom Data Change Manager -> Because of event not working as intended this class deals with scanning every object custom data and dealing with it in different ways.
-     * Data parser -> Takes the data from the custom data and passes it into more useful type of data.
-     *
-     * TODO fix issue with grid splitting/merging
-     *
-     *
-     */
-
-
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_MyProgrammableBlock), false, "LargeTrashController",
         "SmallTrashController")]
     public class MainClass : MyGameLogicComponent
     {
         private const string ClassName = "Main-Class";
-        public GridSystemOwnerV2 GridSystemOwner;
+        public GridManager GridSystemOwner;
         private bool isSubbed;
-
+        private bool ManagerCreated;
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
@@ -62,29 +39,49 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         private void ModSessionComponent_AllowInitialization()
         {
             if (isSubbed) ModSessionComponent.AllowInitialization -= ModSessionComponent_AllowInitialization;
-
             NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
             Logger.Log("MainClass", "Trash Sorter starting up");
-            GridSystemOwner = new GridSystemOwnerV2(Entity);
-
-            GridSystemOwner.NeedsUpdate += GridSystemOwnerCallback_NeedsUpdate;
-            GridSystemOwner.DisposeInvoke += GridSystemOwnerCallback_DisposeInvoke;
         }
 
+        private void Entity_OnClosing(IMyEntity obj)
+        {
+            NeedsUpdate = MyEntityUpdateEnum.NONE;
+            _gridManager.Dispose();
+        }
 
         public override void UpdateOnceBeforeFrame()
         {
             base.UpdateOnceBeforeFrame();
+            if (!ManagerCreated)
+            {
+                var wat5 = Stopwatch.StartNew();
+                Logger.Log(ClassName, "Initializing step 1. Starting grid management.");
+                _gridManager = new GridInitializerRewritten.GridManagerRewritten(Entity);
+                Entity.OnClosing += Entity_OnClosing;
+                Logger.Log(ClassName, $"Step 1. Time taken {wat5.Elapsed.TotalMilliseconds}ms");
+                wat5.Stop();
+                totalInitTime += wat5.Elapsed;
+                ManagerCreated = true;
+            }
+
             GridSystemOwner.UpdateOnceBeforeFrame(); // Initializing management.
         }
 
-        private void GridSystemOwnerCallback_DisposeInvoke()
+        public override void UpdateAfterSimulation()
         {
-            GridSystemOwner.NeedsUpdate -= GridSystemOwnerCallback_NeedsUpdate;
-            GridSystemOwner.DisposeInvoke -= GridSystemOwnerCallback_DisposeInvoke;
+            base.UpdateAfterSimulation();
+            _gridManager.Counter();
         }
 
-        private void GridSystemOwnerCallback_NeedsUpdate(MyEntityUpdateEnum obj)
+
+        private void GridSystemOwnerCallbackDisposeRequired()
+        {
+            Logger.LogWarning(ClassName, $"Dispose called on entity id {Entity.EntityId}, on grid {((IMyCubeBlock)Entity).CubeGrid.CustomName}");
+            GridSystemOwner.UpdateRequired -= GridSystemOwnerCallbackUpdateRequired;
+            GridSystemOwner.DisposeRequired -= GridSystemOwnerCallbackDisposeRequired;
+        }
+
+        private void GridSystemOwnerCallbackUpdateRequired(MyEntityUpdateEnum obj)
         {
             NeedsUpdate = obj;
         }
@@ -93,8 +90,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
 
 
         // Storing files so GC won't sudo rm rf them.
-        private MainItemStorage _mainItemStorage;
-        private InventoryGridManager inventoryGridManager;
+        private GridInitializerRewritten.GridManagerRewritten _gridManager;
+        private ItemStorage _mainItemStorage;
+        private ItemGridManager inventoryGridManager;
         private ModSorterManager _modSorterMainManager;
         private SorterChangeHandler sorterChangeHandler;
         private TimeSpan totalInitTime;
@@ -107,44 +105,49 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
             switch (Initialization_Step)
             {
                 case 0:
+                    
+                case 1:
                     var wat1 = Stopwatch.StartNew();
-                    Logger.Log(ClassName, "Initializing step 1. Creating item storage.");
-                    _mainItemStorage = new MainItemStorage();
+                    Logger.Log(ClassName, "Initializing step 2. Creating item storage.");
+                    _mainItemStorage = new ItemStorage();
                     Initialization_Step++;
                     wat1.Stop();
                     totalInitTime += wat1.Elapsed;
-                    Logger.Log(ClassName, $"Step 1. Time taken {wat1.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 2. Time taken {wat1.Elapsed.TotalMilliseconds}ms");
                     break;
 
-                case 1:
+                case 2:
                     var wat2 = Stopwatch.StartNew();
-                    Logger.Log(ClassName, "Initializing step 2. Starting grid inventory management.");
-                    inventoryGridManager = new InventoryGridManager(_mainItemStorage,
-                        GridSystemOwner.ManagedGrids);
+                    Logger.Log(ClassName, "Initializing step 3. Starting grid inventory management.");
+                    inventoryGridManager = new ItemGridManager(_mainItemStorage,
+                        GridSystemOwner.GridStorage);
                     Initialization_Step++;
                     wat2.Stop();
                     totalInitTime += wat2.Elapsed;
-                    Logger.Log(ClassName, $"Step 2. Time taken {wat2.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 3. Time taken {wat2.Elapsed.TotalMilliseconds}ms");
                     break;
-                case 2:
+
+
+                case 3:
                     var wat3 = Stopwatch.StartNew();
-                    Logger.Log(ClassName, "Initializing step 3. Starting inventory callback management.");
+                    Logger.Log(ClassName, "Initializing step 4. Starting inventory callback management.");
                     sorterChangeHandler = new SorterChangeHandler(_mainItemStorage);
                     Initialization_Step++;
                     wat3.Stop();
                     totalInitTime += wat3.Elapsed;
-                    Logger.Log(ClassName, $"Step 3. Time taken {wat3.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 4. Time taken {wat3.Elapsed.TotalMilliseconds}ms");
                     break;
-                case 3:
+
+                case 4:
                     var wat4 = Stopwatch.StartNew();
-                    Logger.Log(ClassName, "Initializing step 4. Starting trash sorter management.");
+                    Logger.Log(ClassName, "Initializing step 5. Starting trash sorter management.");
                     _modSorterMainManager =
                         new ModSorterManager(inventoryGridManager.ModSorters, _mainItemStorage,
                             inventoryGridManager, sorterChangeHandler.SorterLimitManagers,
                             _mainItemStorage.NameToDefinitionMap);
                     wat4.Stop();
                     totalInitTime += wat4.Elapsed;
-                    Logger.Log(ClassName, $"Step 4. Time taken {wat4.Elapsed.TotalMilliseconds}ms");
+                    Logger.Log(ClassName, $"Step 5. Time taken {wat4.Elapsed.TotalMilliseconds}ms");
                     Logger.Log(ClassName, $"Total init time. Time taken {totalInitTime.TotalMilliseconds}ms");
                     Initialization_Step++;
                     break;
@@ -155,7 +158,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter
         public override void UpdateAfterSimulation100()
         {
             base.UpdateAfterSimulation100();
-            if (Initialization_Step < 4) return;
+            if (Initialization_Step < 5) return;
 
             _modSorterMainManager.OnAfterSimulation100();
             sorterChangeHandler.OnAfterSimulation100();

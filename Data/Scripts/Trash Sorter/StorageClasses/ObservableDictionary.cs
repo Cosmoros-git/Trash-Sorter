@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
-using VRage.Utils;
 using VRage;
+using VRage.Utils;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
+namespace Trash_Sorter.StorageClasses
 {
     public class ObservableDictionary<TKey> : Dictionary<TKey, FixedPointReference>, IEqualityComparer<string>
     {

@@ -2,7 +2,7 @@
 using Sandbox.ModAPI;
 using VRage.Utils;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent
+namespace Trash_Sorter.StaticComponents
 {
     public static class Logger
     {

@@ -40,9 +40,9 @@
             <ResourceSinkGroup>Conveyors</ResourceSinkGroup>
             <PowerInput>0.00025</PowerInput>
             <InventorySize>
-                <X>1</X>
-                <Y>1</Y>
-                <Z>1</Z>
+                <X>0.669</X>
+                <Y>0.669</Y>
+                <Z>0.669</Z>
             </InventorySize>
             <EmissiveColorPreset>Default</EmissiveColorPreset>
             <DestroyEffect>BlockDestroyedExplosion_Large</DestroyEffect>

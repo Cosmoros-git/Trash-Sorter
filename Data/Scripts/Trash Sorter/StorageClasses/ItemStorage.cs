@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
+using Trash_Sorter.BaseClass;
+using Trash_Sorter.StaticComponents;
 using VRage;
 using VRage.Game;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
+namespace Trash_Sorter.StorageClasses
 {
     public class FixedPointReference
     {
@@ -17,7 +17,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
         }
     }
 
-    public class MainItemStorage : ModBase
+    public class ItemStorage : ModBase
     {
         // Commented out dictionaries were just never used.
         public Dictionary<string, MyDefinitionId> NameToDefinitionMap;
@@ -29,7 +29,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
         public ObservableDictionary<MyDefinitionId> ItemsDictionary;
 
         // This is main storage of my values, id references from strings and hash set of ids I do care about.
-        public MainItemStorage()
+        public ItemStorage()
         {
             NameToDefinitionMap = new Dictionary<string, MyDefinitionId>(ModSessionComponent.NameToDefinitionMap);
             ItemsDictionary = new ObservableDictionary<MyDefinitionId>(new Dictionary<MyDefinitionId, FixedPointReference>(ModSessionComponent.ItemStorageReference));

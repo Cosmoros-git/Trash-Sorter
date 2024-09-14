@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
+using Trash_Sorter.BaseClass;
+using Trash_Sorter.SorterClasses;
 using VRage.Game;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
+namespace Trash_Sorter.StorageClasses
 {
     /// <summary>
     /// The SorterChangeHandler class manages changes in item quantities and updates associated sorter limits. 
@@ -33,7 +32,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses
         /// Initializes a new instance of the SorterChangeHandler class, setting up the filter dictionary and subscribing to item quantity changes.
         /// </summary>
         /// <param name="mainItemStorage">The main item storage that holds the item definitions and quantities.</param>
-        public SorterChangeHandler(MainItemStorage mainItemStorage)
+        public SorterChangeHandler(ItemStorage mainItemStorage)
         {
             PendingItemChanges = new HashSet<MyDefinitionId>();
             ItemQuantities = mainItemStorage.ItemsDictionary;

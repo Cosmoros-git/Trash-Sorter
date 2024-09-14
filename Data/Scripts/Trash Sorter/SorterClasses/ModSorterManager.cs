@@ -4,14 +4,16 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using Sandbox.ModAPI.Ingame;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.BaseClass;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.SessionComponent;
-using Trash_Sorter.Data.Scripts.Trash_Sorter.StorageClasses;
+using Trash_Sorter.BaseClass;
+using Trash_Sorter.GridManagerRewritten;
+using Trash_Sorter.GridManagers;
+using Trash_Sorter.StaticComponents;
+using Trash_Sorter.StorageClasses;
 using VRage.Game;
 using IMyConveyorSorter = Sandbox.ModAPI.IMyConveyorSorter;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
 
-namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
+namespace Trash_Sorter.SorterClasses
 {
     /// <summary>
     /// The ModConveyorManager class manages conveyor sorters and their custom data.
@@ -29,7 +31,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
         private readonly HashSet<IMyTerminalBlock> GuideHasBeenSet;
 
-        private readonly InventoryGridManager InventoryGridManager;
+        private readonly ItemGridManager InventoryGridManager;
 
         private readonly Stopwatch watch = new Stopwatch();
 
@@ -42,7 +44,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         /// <param name="sorterLimitManagers">Dictionary of sorter limit managers.</param>
         /// <param name="nameToDefinition">Dictionary mapping names to item definitions.</param>
         public ModSorterManager(HashSet<IMyConveyorSorter> sorters,
-            MainItemStorage mainItemAccess, InventoryGridManager inventoryGridManager,
+            ItemStorage mainItemAccess, ItemGridManager inventoryGridManager,
             Dictionary<MyDefinitionId, SorterLimitManager> sorterLimitManagers,
             Dictionary<string, MyDefinitionId> nameToDefinition)
         {
@@ -53,25 +55,13 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             ItemNameToDefinitionMap = mainItemAccess.NameToDefinitionMap;
             InventoryGridManager = inventoryGridManager;
             GuideHasBeenSet = new HashSet<IMyTerminalBlock>();
-
-            // Registering event for sorter addition
-            inventoryGridManager.OnModSorterAdded += Add_Sorter;
-
-            // Create entries and initialize sorters
+            ModSorterAdded += Add_Sorter;
 
             SorterInit();
             watch.Stop();
             Logger.Log(ClassName,
                 $"Initialization took {watch.Elapsed.Milliseconds}ms, amount of trash sorters {ModSorterCollection.Count}");
         }
-
-        // Guide data is made here :)
-        /// <summary>
-        /// Creates all possible item entries for user reference.
-        /// </summary>
-        /// <summary>
-        /// Initializes each sorter by setting default values and registering events.
-        /// </summary>
         private void SorterInit()
         {
             foreach (var sorter in ModSorterCollection)
@@ -79,11 +69,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                 Add_Sorter(sorter);
             }
         }
-
-        /// <summary>
-        /// Adds a new sorter, sets default values, and registers events.
-        /// </summary>
-        /// <param name="sorter">The sorter being added.</param>
         private void Add_Sorter(IMyConveyorSorter sorter)
         {
             sorter.SetFilter(MyConveyorSorterMode.Whitelist, new List<MyInventoryItemFilter>());
@@ -99,10 +84,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             Update_Values(sorter);
         }
 
-        /// <summary>
-        /// Tries to update the sorter's values if custom data has changed.
-        /// </summary>
-        /// <param name="sorter">The sorter to update.</param>
+
         private void Try_Updating_Values(IMyConveyorSorter sorter)
         {
             if (string.IsNullOrWhiteSpace(sorter.CustomData) && SorterDataStorageRef.IsEmpty(sorter))
@@ -113,11 +95,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             Update_Values(sorter);
         }
-
-        /// <summary>
-        /// Updates the sorter's filter values based on changes in custom data.
-        /// </summary>
-        /// <param name="sorter">The sorter whose values are updated.</param>
         private void Update_Values(IMyConveyorSorter sorter)
         {
             bool hasFilterTagBeenFound;
@@ -126,9 +103,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             // Track changes and fetch data
             var data = SorterDataStorageRef.TrackChanges(sorter, out hasFilterTagBeenFound);
 
-            Logger.Log(ClassName,
-                $"New entries {SorterDataStorageRef.AddedEntries.Count}, removed entries {SorterDataStorageRef.RemovedEntries.Count}, " +
-                $"changed entries {SorterDataStorageRef.ChangedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
+          //  Logger.Log(ClassName,$"New entries {SorterDataStorageRef.AddedEntries.Count}, removed entries {SorterDataStorageRef.RemovedEntries.Count}, " +$"changed entries {SorterDataStorageRef.ChangedEntries.Count}, has filter been found {hasFilterTagBeenFound}");
 
             // Process the data only if the filter tag was found
             if (hasFilterTagBeenFound)
@@ -174,11 +149,11 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
                     if (defIdDictionary.TryGetValue(sorterChangedData.Key.Trim(), out index))
                     {
                         data[index] = newLine;
-                        Logger.Log(ClassName, $"Index found {index} for line {newLine}");
+                        //Logger.Log(ClassName, $"Index found {index} for line {newLine}");
                     }
                     else
                     {
-                        Logger.LogError(ClassName, $"Index for changed {newLine} was not found");
+                       // Logger.LogError(ClassName, $"Index for changed {newLine} was not found");
                     }
                 }
             }
@@ -188,7 +163,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             sorter.CustomData = processedString;
             SorterDataStorageRef.AddOrUpdateSorterRawData(sorter);
         }
-
         public string UsingStringBuilder(List<string> array)
         {
             var sb = new StringBuilder();
@@ -207,11 +181,9 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
 
         private double itemRequestAmount;
-
         private double itemTriggerAmount;
 
         // Functions to process new/removed/edited lines. TODO MAYBE LOOK INTO OPTIMIZING THIS
-
         private string ProcessNewLine(string trimmedLine, IMyConveyorSorter sorter, out string idString)
         {
             var parts = trimmedLine.Split(new[] { '|' }, StringSplitOptions.None);
@@ -254,13 +226,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             // Return the line back for custom data.
             return $"{firstEntry} | {itemRequestAmount} | {itemTriggerAmount}";
         }
-
-        /// <summary>
-        /// Processes the deletion of a line corresponding to a sorter limit. 
-        /// It un registers the sorter from the SorterLimitManager associated with the given definition.
-        /// </summary>
-        /// <param name="defId">The MyDefinitionId of the item being removed.</param>
-        /// <param name="sorter">The sorter from which the item is being removed.</param>
         private void ProcessDeletedLine(MyDefinitionId defId, IMyConveyorSorter sorter)
         {
             SorterLimitManager limitManager;
@@ -272,17 +237,6 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
 
             limitManager.UnRegisterSorter(sorter);
         }
-
-        /// <summary>
-        /// Processes the modification of a line corresponding to a sorter limit. 
-        /// It updates or un registers the sorter from the SorterLimitManager based on the parsed data.
-        /// </summary>
-        /// <param name="defId">The string identifier of the item being modified.</param>
-        /// <param name="combinedValue">The value string representing request and trigger amounts.</param>
-        /// <param name="sorter">The sorter being updated.</param>
-        /// <returns>A formatted string representing the updated line.</returns>
-        ///
-        /// 
         private string ProcessChangedLine(string defId, string combinedValue, IMyConveyorSorter sorter)
         {
             MyDefinitionId definitionId;
@@ -335,11 +289,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
         }
 
         // TODO find why it double triggers. Guide is always found twice. Not really an issue. But still
-        /// <summary>
-        /// Event handler for when the terminal block's custom name is changed. 
-        /// Detects if the guide call is present in the name and replaces it with the guide data.
-        /// </summary>
-        /// <param name="obj">The terminal block whose name was changed.</param>
+      
         private void Terminal_CustomNameChanged(IMyTerminalBlock obj)
         {
             var name = obj.CustomName;
@@ -359,9 +309,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             SorterDataStorageRef.AddOrUpdateSorterRawData((IMyConveyorSorter)obj);
         }
 
-        /// <summary>
-        /// Method called after every 100 simulation ticks. It checks and updates values for all sorters in the collection.
-        /// </summary>
+
         public void OnAfterSimulation100()
         {
             foreach (var sorter in ModSorterCollection)
@@ -370,10 +318,7 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             }
         }
 
-        /// <summary>
-        /// Event handler for when a sorter is closed. Un-registers events and removes the sorter from the collection.
-        /// </summary>
-        /// <param name="obj">The entity (sorter) that is being closed.</param>
+        
         private void Sorter_OnClose(VRage.ModAPI.IMyEntity obj)
         {
             var terminal = (IMyTerminalBlock)obj;
@@ -383,14 +328,10 @@ namespace Trash_Sorter.Data.Scripts.Trash_Sorter.ActiveClasses.Mod_Sorter
             ModSorterCollection.Remove(sorter);
         }
 
-        /// <summary>
-        /// Disposes the ModConveyorManager instance and un-registers all events to prevent memory leaks.
-        /// </summary>
         public override void Dispose()
         {
             base.Dispose();
-            InventoryGridManager.OnModSorterAdded -= Add_Sorter;
-            foreach (var sorter in ModSorterCollection.ToList())
+            foreach (var sorter in ModSorterCollection.ToArray())
             {
                 sorter.OnClose -= Sorter_OnClose;
                 var terminal = (IMyTerminalBlock)sorter;
