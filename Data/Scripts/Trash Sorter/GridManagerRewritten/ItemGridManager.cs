@@ -10,10 +10,8 @@ using Trash_Sorter.StorageClasses;
 using VRage;
 using VRage.Game;
 using VRage.Game.Entity;
-using VRage.Game.ModAPI.Ingame;
-using IMyCubeBlock = VRage.Game.ModAPI.IMyCubeBlock;
-using IMyCubeGrid = VRage.Game.ModAPI.IMyCubeGrid;
-using IMyInventory = VRage.Game.ModAPI.IMyInventory;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace Trash_Sorter.GridManagerRewritten
 {
@@ -24,13 +22,14 @@ namespace Trash_Sorter.GridManagerRewritten
         public HashSet<IMyCubeBlock> ManagedBlocks = new HashSet<IMyCubeBlock>();
 
 
-        public HashSet<IMyTerminalBlock> TrashBlocks = new HashSet<IMyTerminalBlock>();
+        public HashSet<IMyCubeBlock> TrashBlocks = new HashSet<IMyCubeBlock>();
         public HashSet<IMyConveyorSorter> ModSorters = new HashSet<IMyConveyorSorter>();
 
 
         private readonly HashSet<MyDefinitionId> ProcessedIds;
-        protected readonly GridStorage GridStorage;
+        protected GridStorage GridStorage;
         private readonly ItemStorage ItemStorage;
+        private readonly ObservableDictionary<MyDefinitionId> ItemsDictionary;
 
         public ItemGridManager(ItemStorage itemStorage, GridStorage storage)
         {
@@ -38,38 +37,44 @@ namespace Trash_Sorter.GridManagerRewritten
 
             ItemStorage = itemStorage;
             ProcessedIds = itemStorage.ProcessedItems;
-            GridStorage = storage;
+            ItemsDictionary = ItemStorage.ItemsDictionary;
         }
 
+        public void Init(GridStorage gridStorage, HashSet<IMyCubeGrid> gridsToManage)
+        {
+            GridStorage = gridStorage;
+            foreach (var grid in gridsToManage)
+            {
+                AddGridToSystem(grid);
+            }
+        }
 
         internal void UpdateGridInSystem(IMyCubeGrid grid)
         {
             if (!GridStorage.ManagedGrids.Contains(grid))
             {
-                Logger.LogError(ClassName, $"Grid is not in the list of managed.{grid.CustomName}"); return;
+                Logger.LogError(ClassName, $"Grid is not in the list of managed.{grid.CustomName}");
+                return;
             } // Skip if already managed
 
             Logger.Log(ClassName, $"Subscribing to the grid {grid.CustomName}");
             var blocks = grid.GetFatBlocks<IMyTerminalBlock>().ToHashSet();
-            foreach (var block in blocks)
-            {
-                AddBlock(block);
-            }
-            
+            blocks.ExceptWith(ManagedBlocks.OfType<IMyTerminalBlock>());
+            AddBlock(blocks);
         }
 
         internal void RemoveGridFromSystem(IMyCubeGrid grid)
         {
-            if (!GridStorage.ManagedGrids.Contains(grid)) return;
+            if (!ManagedGrids.Contains(grid)) return;
             Logger.LogWarning(ClassName, $"Grid {grid.DisplayName} is being removed.");
-            var blocks = grid.GetFatBlocks<IMyCubeBlock>().ToHashSet();
-            blocks.IntersectWith(ManagedBlocks);
+            var blocks = grid.GetFatBlocks<IMyTerminalBlock>().ToHashSet();
+            blocks.IntersectWith(ManagedBlocks.OfType<IMyTerminalBlock>());
             RemoveBlock(blocks);
         }
 
-        internal void AddedGridToSystem(IMyCubeGrid grid)
+        internal void AddGridToSystem(IMyCubeGrid grid)
         {
-            if (ManagedGrids.Contains(grid))
+            if (!ManagedGrids.Add(grid))
             {
                 Logger.LogWarning(ClassName, $"Grid already subscribed {grid.CustomName}");
                 return;
@@ -81,21 +86,14 @@ namespace Trash_Sorter.GridManagerRewritten
         }
 
 
-
-        private void AddBlock(HashSet<IMyCubeBlock> blocks)
+        private void AddBlock(HashSet<IMyTerminalBlock> blocks)
         {
             foreach (var block in blocks)
             {
                 AddBlock(block);
             }
-           
         }
-        private void AddBlock(IMyCubeBlock obj)
-        {
-            var terminal = obj as IMyTerminalBlock;
-            if (terminal == null) return;
-            AddBlock(terminal);
-        } // Event linking.
+
         private void AddBlock(IMyTerminalBlock block)
         {
             if (ManagedBlocks.Contains(block)) return;
@@ -126,110 +124,110 @@ namespace Trash_Sorter.GridManagerRewritten
             }
 
             // Add inventories for the block
-            for (var i = 0; i < block.InventoryCount; i++)
-            {
-                Add_Inventory((MyInventory)block.GetInventory(i));
-            }
-        } // Singular block add event.
-
-
+            InventoryFunctions.ScanInventoryUsingMyModDictionary(block, ItemsDictionary);
+        }
 
 
         private void Terminal_CustomNameChanged(IMyTerminalBlock myTerminalBlock)
         {
             if (IsTrashInventory(myTerminalBlock))
             {
-                if (TrashBlocks.Contains(myTerminalBlock)) return;
-                AddTrashBlock(myTerminalBlock);
+                if (!TrashBlocks.Add(myTerminalBlock)) return;
+                Logger.Log(ClassName, $"Block considered as trash inventory.");
+                ManageInventory(myTerminalBlock, -1);
             }
             else
             {
-                if (!TrashBlocks.Contains(myTerminalBlock)) return;
-                RemoveTrashBlock(myTerminalBlock);
+                if (!TrashBlocks.Remove(myTerminalBlock)) return;
+                Logger.Log(ClassName, $"Block removed from trash inventories.");
+                ManageInventory(myTerminalBlock, 1);
             }
         } // Deals with block inventory being counted or not.
-        private void AddTrashBlock(IMyTerminalBlock block)
-        {
-            TrashBlocks.Add(block);
-            Logger.Log(ClassName, $"Block considered as trash inventory.");
-            for (var i = 0; i < block.InventoryCount; i++)
-            {
-                Remove_Inventory((MyInventory)block.GetInventory(i));
-            }
-        } // Clears inventories of blocks that are ignored.
-        private void RemoveTrashBlock(IMyTerminalBlock block)
-        {
-            TrashBlocks.Remove(block);
-            Logger.Log(ClassName, $"Block removed from trash inventories.");
-            for (var i = 0; i < block.InventoryCount; i++)
-            {
-                Add_Inventory((MyInventory)block.GetInventory(i));
-            }
-        } // Adds inventories if block is no longer ignored
-
-
 
 
         private void InventoryContentChanged(MyInventoryBase arg1, MyPhysicalInventoryItem arg2, MyFixedPoint arg3)
         {
-            var definition = arg2.GetDefinitionId();
+            var definition = arg2.Content.GetId();
             if (ProcessedIds.Contains(definition))
             {
                 ItemStorage.ItemsDictionary.UpdateValue(definition, arg3);
             }
-        } 
-        private void Add_Inventory(MyInventory inventory)
+        }
+
+        private void AddInventory(IMyInventory inventory)
         {
-            if(Inventories.Contains(inventory)) return;
-            ScanInventory(inventory);
-            Inventories.Add(inventory);
-            inventory.InventoryContentChanged += InventoryContentChanged;
-        } // Adds inventory to management
-        private void Remove_Inventory(MyInventory inventory)
-        {
-            if (!Inventories.Contains(inventory)) return;
-            inventory.InventoryContentChanged -= InventoryContentChanged;
-            Inventories.Remove(inventory);
-            var items = inventory.GetItems();
-            foreach (var item in items)
+            if (inventory == null || !Inventories.Add(inventory)) return;
+
+            var myInventory = inventory as MyInventory;
+            if (myInventory != null)
             {
-                var id = item.GetDefinitionId();
-                if (!ProcessedIds.Contains(id)) continue;
-
-                ItemStorage.ItemsDictionary.UpdateValue(id, -item.Amount);
+                myInventory.InventoryContentChanged += InventoryContentChanged;
             }
-        } // Removes inventory from management.
+
+            ManageInventory(inventory, 1);
+        }
+
+        private void RemoveInventory(IMyInventory inventory)
+        {
+            if (inventory == null || !Inventories.Remove(inventory)) return;
+
+            var myInventory = inventory as MyInventory;
+            if (myInventory != null)
+            {
+                myInventory.InventoryContentChanged -= InventoryContentChanged;
+            }
+
+            ManageInventory(inventory, -1);
+        }
+
+        // Usage
+        private void AddInventory(IMyCubeBlock block)
+        {
+            InventoryFunctions.ProcessInventory(block, AddInventory);
+        }
+
+        private void RemoveInventory(IMyCubeBlock block)
+        {
+            InventoryFunctions.ProcessInventory(block, RemoveInventory);
+        }
 
 
 
-
-        private void RemoveBlock(HashSet<IMyCubeBlock> blocks)
+        private void RemoveBlock<T>(HashSet<T> blocks) where T : IMyEntity
         {
             foreach (var block in blocks)
             {
                 RemoveBlock(block);
             }
         } // Group removal overload
-        private void RemoveBlock(VRage.ModAPI.IMyEntity block)
+
+        private void RemoveBlock<T>(T block) where T : IMyEntity
         {
             if (block == null) return;
             block.OnClosing -= RemoveBlock;
 
-            var myBlock = (IMyTerminalBlock)block;
-            if (TrashSubtype.Contains(myBlock.BlockDefinition.SubtypeId))
+            var terminal = (IMyTerminalBlock)block;
+            if (TrashSubtype.Contains(terminal.BlockDefinition.SubtypeId))
             {
-                ModSorters.Remove(myBlock as IMyConveyorSorter);
+                ModSorters.Remove(terminal as IMyConveyorSorter);
                 return;
             }
 
-            if (IsTrashInventory(myBlock)) return;
+            if (IsTrashInventory(terminal)) return;
 
-            ((IMyTerminalBlock)block).CustomNameChanged -= Terminal_CustomNameChanged;
-            for (var i = 0; i < block.InventoryCount; i++)
-            {
-                Remove_Inventory((MyInventory)block.GetInventory(i));
-            }
+            terminal.CustomNameChanged -= Terminal_CustomNameChanged;
+            RemoveInventory((IMyCubeBlock)block);
         } // individual block removal
+
+        private void ManageInventory(IMyInventory inventory, int multiplier)
+        {
+            InventoryFunctions.ScanInventoryUsingMyModDictionary(inventory, ItemsDictionary, multiplier);
+        }
+
+        private void ManageInventory(IMyCubeBlock inventory, int multiplier)
+        {
+            InventoryFunctions.ScanInventoryUsingMyModDictionary(inventory, ItemsDictionary, multiplier);
+        }
 
         public override void Dispose()
         {

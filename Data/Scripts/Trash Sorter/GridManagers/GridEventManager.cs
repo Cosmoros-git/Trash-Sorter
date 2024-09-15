@@ -71,7 +71,7 @@ namespace Trash_Sorter.GridManagers
         {
             InventoryManager = manager;
             GridRemoved -= InventoryManager.RemoveGridFromSystem;
-            GridAdded -= InventoryManager.AddedGridToSystem;
+            GridAdded -= InventoryManager.AddGridToSystem;
             GridUpdated -= InventoryManager.UpdateGridInSystem;
             BlockAdded -= InventoryManager.AddBlock;
         }
