@@ -3,7 +3,7 @@ using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
-namespace Trash_Sorter.StaticComponents.StaticFunction
+namespace Trash_Sorter.StaticComponents.StaticFunctions
 {
     public static class BlockFunctions
     {

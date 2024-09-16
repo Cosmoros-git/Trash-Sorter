@@ -31,7 +31,7 @@ namespace Trash_Sorter.SorterClasses
 
         private readonly HashSet<IMyTerminalBlock> GuideHasBeenSet;
 
-        private readonly ItemGridManager InventoryGridManager;
+        private readonly InventoryManager InventoryGridManager;
 
         private readonly Stopwatch watch = new Stopwatch();
 
@@ -44,7 +44,7 @@ namespace Trash_Sorter.SorterClasses
         /// <param name="sorterLimitManagers">Dictionary of sorter limit managers.</param>
         /// <param name="nameToDefinition">Dictionary mapping names to item definitions.</param>
         public ModSorterManager(HashSet<IMyConveyorSorter> sorters,
-            ItemStorage mainItemAccess, ItemGridManager inventoryGridManager,
+            ItemStorage mainItemAccess, InventoryManager inventoryGridManager,
             Dictionary<MyDefinitionId, SorterLimitManager> sorterLimitManagers,
             Dictionary<string, MyDefinitionId> nameToDefinition)
         {

@@ -1,4 +1,6 @@
 ﻿using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using Trash_Sorter.BaseClass;
 using Trash_Sorter.StaticComponents;
 using VRage;
@@ -19,23 +21,14 @@ namespace Trash_Sorter.StorageClasses
 
     public class ItemStorage : ModBase
     {
-        // Commented out dictionaries were just never used.
-        public Dictionary<string, MyDefinitionId> NameToDefinitionMap;
-
-        //  public Dictionary<MyDefinitionId, string> DefinitionToName;
-        public HashSet<MyDefinitionId> ProcessedItems;
-
         //  public HashSet<string> ProcessedItemsNames;
-        public ObservableDictionary<MyDefinitionId> ItemsDictionary;
+        public readonly ObservableDictionary<MyDefinitionId> ItemsDictionary;
 
         // This is main storage of my values, id references from strings and hash set of ids I do care about.
         public ItemStorage()
         {
-            NameToDefinitionMap = new Dictionary<string, MyDefinitionId>(ModSessionComponent.NameToDefinitionMap);
-            ItemsDictionary = new ObservableDictionary<MyDefinitionId>(new Dictionary<MyDefinitionId, FixedPointReference>(ModSessionComponent.ItemStorageReference));
-            Logger.Log(ClassName,$"Amount of items in dictionary {ItemsDictionary.Count}");
-            ProcessedItems = new HashSet<MyDefinitionId>(ModSessionComponent.ProcessedItemsDefinitions);
-            Logger.Log(ClassName, "Item storage created");
+            ItemsDictionary = new ObservableDictionary<MyDefinitionId>(ModSessionComponent.ProcessedItemsDefinitions);
+            Logger.Log(ClassName,$"Item storage created, amount of items in dictionary {ItemsDictionary.Count}, amount of allowed definitions {ModSessionComponent.ProcessedItemsDefinitions.Count}");
         }
     }
 }

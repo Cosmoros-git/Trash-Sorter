@@ -4,7 +4,7 @@ using System.Linq;
 using Sandbox.Game.EntityComponents;
 using VRage.Game.ModAPI;
 
-namespace Trash_Sorter.StaticComponents.StaticFunction
+namespace Trash_Sorter.StaticComponents.StaticFunctions
 {
     public static class StorageModFunctions
     {

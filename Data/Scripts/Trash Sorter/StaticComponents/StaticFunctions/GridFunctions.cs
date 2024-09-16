@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Policy;
 using Sandbox.Game.Entities;
-using Sandbox.Game.EntityComponents;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
-namespace Trash_Sorter.StaticComponents.StaticFunction
+namespace Trash_Sorter.StaticComponents.StaticFunctions
 {
     public static class GridFunctions
     {
@@ -158,7 +158,7 @@ namespace Trash_Sorter.StaticComponents.StaticFunction
             var result = new GridProcessingResult
             {
                 // Get all connected grids
-                ConnectedGrids = GetConnectedGrids(referenceGrid, type)
+                ConnectedGrids = TryGetConnectedGrids(referenceGrid, type)
             };
 
             // Early exit if there are no connected grids
@@ -269,45 +269,87 @@ namespace Trash_Sorter.StaticComponents.StaticFunction
             return result;
         }
 
+        /// <summary>
+        /// Retrieves the grid group data for the specified grid and connection type.
+        /// </summary>
+        /// <param name="grid">
+        /// The grid from which to retrieve the connected grid group.
+        /// If the grid is null, the method returns null.
+        /// </param>
+        /// <param name="type">
+        /// The type of connection to consider when retrieving the grid group (e.g., Mechanical, Electrical, Logical).
+        /// </param>
+        /// <returns>
+        /// An instance of <see cref="IMyGridGroupData"/> representing the grid group connections.
+        /// Returns null if the grid is null or if the grid group data cannot be retrieved.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// The returned <see cref="IMyGridGroupData"/> instance is a pooled object. Do not store references to it beyond immediate use.
+        /// </para>
+        /// <para>
+        /// Subscribe to the <see cref="IMyGridGroupData.OnReleased"/> event to clean up any event handlers or references when the grid group data is released.
+        /// </para>
+        /// <para>
+        /// Use the <see cref="SetVariable"/>, <see cref="GetVariable{T}"/>, and <see cref="TryGetVariable{T}"/> methods to store and retrieve data associated with the grid group.
+        /// Variables are cleared automatically when <see cref="IMyGridGroupData.OnReleased"/> is invoked.
+        /// </para>
+        /// </remarks>
+        public static IMyGridGroupData GetGridGroup(IMyCubeGrid grid, GridLinkTypeEnum type)
+        {
+            if (grid == null)
+            {
+                Logger.LogWarning("GetGridGroup", "Attempted to retrieve grid group data for a null grid.");
+                return null;
+            }
+
+            var gridGroupData = grid.GetGridGroup(type);
+            if (gridGroupData == null)
+            {
+                Logger.LogError("GetGridGroup", $"Failed to retrieve grid group data for grid ID: {grid.EntityId} with link type: {type}");
+            }
+
+            return gridGroupData;
+        }
 
         /// <summary>
         /// Retrieves all grids connected to the provided grid based on the specified grid link type.
-        /// The method returns a set of connected grids, which can be linked mechanically, electrically, or logically depending on the provided connection type.
+        /// The method clears the passed set and then populates it with grids connected mechanically, electrically, or logically based on the connection type.
         /// </summary>
         /// <param name="grid">The reference grid from which to find connected grids. If the grid is null, an empty set is returned.</param>
         /// <param name="type">The type of connection to use for finding connected grids (e.g., Mechanical, Electrical, Logical).</param>
+        /// <param name="connectedGrids">A <see cref="HashSet{IMyCubeGrid}"/> that will be populated with connected grids. This set is cleared at the start of the method.</param>
         /// <returns>
-        /// A <see cref="HashSet{IMyCubeGrid}"/> containing all grids connected to the provided grid based on the given link type.
-        /// If the grid or its grid group is null, an empty set is returned.
+        /// A boolean indicating whether connected grids were successfully retrieved. Returns false if the grid or its grid group is null.
         /// </returns>
-        /// <remarks>
-        /// <para>- This method is useful for retrieving all grids connected to a reference grid through various types of connections, such as mechanical or electrical links.</para>
-        /// <para>- The result can be used to perform operations on all connected grids, such as ownership validation or block manipulation.</para>
-        /// </remarks>
-        public static HashSet<IMyCubeGrid> GetConnectedGrids(IMyCubeGrid grid, GridLinkTypeEnum type)
+        public static bool TryGetConnectedGrids(IMyCubeGrid grid, GridLinkTypeEnum type, HashSet<IMyCubeGrid> connectedGrids)
         {
-            // Ensure the grid is not null
+            // Clear the passed grid set before populating it
+            connectedGrids.Clear();
+
+            // Validate that the grid is not null
             if (grid == null)
             {
-                Logger.LogError("GetConnectedGrids", "Provided grid is null.");
-                return new HashSet<IMyCubeGrid>(); // Return an empty set if grid is null
+                Logger.LogError("TryGetConnectedGrids", "Provided grid is null.");
+                return false;
             }
 
-            // Retrieve the grid group using the mechanical connection type
+            // Retrieve the grid group using the provided connection type
             var gridGroup = grid.GetGridGroup(type);
             if (gridGroup == null)
             {
-                Logger.LogError("GetConnectedGrids", $"Grid group is null for grid: {grid.DisplayName}");
-                return new HashSet<IMyCubeGrid>(); // Return an empty set if no group is found
+                Logger.LogError("TryGetConnectedGrids", $"Grid group is null for grid: {grid.DisplayName}.");
+                return false;
             }
 
             // Collect all connected grids
-            var connectedGrids = new HashSet<IMyCubeGrid>();
             gridGroup.GetGrids(connectedGrids);
-            // Log the result and return
-            Logger.Log("GetConnectedGrids",
-                $"Found {connectedGrids.Count} connected grids for grid: {grid.DisplayName}");
-            return connectedGrids;
+
+            // Log the result for debugging purposes
+            Logger.Log("TryGetConnectedGrids",
+                $"Found {connectedGrids.Count} connected grids for grid: {grid.DisplayName}.");
+
+            return true; // Indicate success
         }
 
         /// <summary>

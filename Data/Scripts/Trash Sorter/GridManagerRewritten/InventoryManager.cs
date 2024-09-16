@@ -5,7 +5,7 @@ using Sandbox.Game;
 using Sandbox.ModAPI;
 using Trash_Sorter.BaseClass;
 using Trash_Sorter.StaticComponents;
-using Trash_Sorter.StaticComponents.StaticFunction;
+using Trash_Sorter.StaticComponents.StaticFunctions;
 using Trash_Sorter.StorageClasses;
 using VRage;
 using VRage.Game;
@@ -15,43 +15,16 @@ using VRage.ModAPI;
 
 namespace Trash_Sorter.GridManagerRewritten
 {
-    public class ItemGridManager : ModBase
+    public class InventoryManager : InventoryManagerBase
     {
-        public HashSet<IMyInventory> Inventories = new HashSet<IMyInventory>();
-        public HashSet<IMyCubeGrid> ManagedGrids = new HashSet<IMyCubeGrid>();
-        public HashSet<IMyCubeBlock> ManagedBlocks = new HashSet<IMyCubeBlock>();
-
-
-        public HashSet<IMyCubeBlock> TrashBlocks = new HashSet<IMyCubeBlock>();
-        public HashSet<IMyConveyorSorter> ModSorters = new HashSet<IMyConveyorSorter>();
-
-
-        private readonly HashSet<MyDefinitionId> ProcessedIds;
-        protected GridStorage GridStorage;
-        private readonly ItemStorage ItemStorage;
-        private readonly ObservableDictionary<MyDefinitionId> ItemsDictionary;
-
-        public ItemGridManager(ItemStorage itemStorage, GridStorage storage)
+        public InventoryManager()
         {
             Logger.Log(ClassName, "Started Inventory Grid manager");
-
-            ItemStorage = itemStorage;
-            ProcessedIds = itemStorage.ProcessedItems;
-            ItemsDictionary = ItemStorage.ItemsDictionary;
-        }
-
-        public void Init(GridStorage gridStorage, HashSet<IMyCubeGrid> gridsToManage)
-        {
-            GridStorage = gridStorage;
-            foreach (var grid in gridsToManage)
-            {
-                AddGridToSystem(grid);
-            }
         }
 
         internal void UpdateGridInSystem(IMyCubeGrid grid)
         {
-            if (!GridStorage.ManagedGrids.Contains(grid))
+            if (!ManagedGrids.Contains(grid))
             {
                 Logger.LogError(ClassName, $"Grid is not in the list of managed.{grid.CustomName}");
                 return;
@@ -71,7 +44,6 @@ namespace Trash_Sorter.GridManagerRewritten
             blocks.IntersectWith(ManagedBlocks.OfType<IMyTerminalBlock>());
             RemoveBlock(blocks);
         }
-
         internal void AddGridToSystem(IMyCubeGrid grid)
         {
             if (!ManagedGrids.Add(grid))
@@ -93,7 +65,6 @@ namespace Trash_Sorter.GridManagerRewritten
                 AddBlock(block);
             }
         }
-
         private void AddBlock(IMyTerminalBlock block)
         {
             if (ManagedBlocks.Contains(block)) return;
@@ -124,10 +95,15 @@ namespace Trash_Sorter.GridManagerRewritten
             }
 
             // Add inventories for the block
-            InventoryFunctions.ScanInventoryUsingMyModDictionary(block, ItemsDictionary);
+            AddInventory(block);
         }
 
 
+
+
+
+
+        // Events
         private void Terminal_CustomNameChanged(IMyTerminalBlock myTerminalBlock)
         {
             if (IsTrashInventory(myTerminalBlock))
@@ -143,20 +119,20 @@ namespace Trash_Sorter.GridManagerRewritten
                 ManageInventory(myTerminalBlock, 1);
             }
         } // Deals with block inventory being counted or not.
-
-
         private void InventoryContentChanged(MyInventoryBase arg1, MyPhysicalInventoryItem arg2, MyFixedPoint arg3)
         {
             var definition = arg2.Content.GetId();
             if (ProcessedIds.Contains(definition))
             {
-                ItemStorage.ItemsDictionary.UpdateValue(definition, arg3);
+                StorageClasses.ItemStorage.ItemsDictionary.UpdateValue(definition, arg3);
             }
         }
 
+
+
         private void AddInventory(IMyInventory inventory)
         {
-            if (inventory == null || !Inventories.Add(inventory)) return;
+            if (inventory == null || !ManagedInventories.Add(inventory)) return;
 
             var myInventory = inventory as MyInventory;
             if (myInventory != null)
@@ -166,10 +142,23 @@ namespace Trash_Sorter.GridManagerRewritten
 
             ManageInventory(inventory, 1);
         }
+        private void AddInventory(IMyCubeBlock block)
+        {
+            InventoryFunctions.ProcessInventory(block, AddInventory);
+        }
 
+
+
+
+
+
+        private void RemoveInventory(IMyCubeBlock block)
+        {
+            InventoryFunctions.ProcessInventory(block, RemoveInventory);
+        }
         private void RemoveInventory(IMyInventory inventory)
         {
-            if (inventory == null || !Inventories.Remove(inventory)) return;
+            if (inventory == null || !ManagedInventories.Remove(inventory)) return;
 
             var myInventory = inventory as MyInventory;
             if (myInventory != null)
@@ -180,16 +169,6 @@ namespace Trash_Sorter.GridManagerRewritten
             ManageInventory(inventory, -1);
         }
 
-        // Usage
-        private void AddInventory(IMyCubeBlock block)
-        {
-            InventoryFunctions.ProcessInventory(block, AddInventory);
-        }
-
-        private void RemoveInventory(IMyCubeBlock block)
-        {
-            InventoryFunctions.ProcessInventory(block, RemoveInventory);
-        }
 
 
 
@@ -200,7 +179,6 @@ namespace Trash_Sorter.GridManagerRewritten
                 RemoveBlock(block);
             }
         } // Group removal overload
-
         private void RemoveBlock<T>(T block) where T : IMyEntity
         {
             if (block == null) return;
@@ -219,15 +197,21 @@ namespace Trash_Sorter.GridManagerRewritten
             RemoveInventory((IMyCubeBlock)block);
         } // individual block removal
 
+
+
+
         private void ManageInventory(IMyInventory inventory, int multiplier)
         {
-            InventoryFunctions.ScanInventoryUsingMyModDictionary(inventory, ItemsDictionary, multiplier);
+            InventoryFunctions.ScanInventoryUsingMyModDictionary(inventory, ItemStorage, multiplier);
         }
-
         private void ManageInventory(IMyCubeBlock inventory, int multiplier)
         {
-            InventoryFunctions.ScanInventoryUsingMyModDictionary(inventory, ItemsDictionary, multiplier);
+            InventoryFunctions.ScanInventoryUsingMyModDictionary(inventory, ItemStorage, multiplier);
         }
+
+
+
+
 
         public override void Dispose()
         {

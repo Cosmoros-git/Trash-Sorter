@@ -1,62 +1,59 @@
 ﻿using System;
 using System.Collections.Generic;
+using Trash_Sorter.StaticComponents;
 using VRage;
 using VRage.Utils;
 
 namespace Trash_Sorter.StorageClasses
 {
-    public class ObservableDictionary<TKey> : Dictionary<TKey, FixedPointReference>, IEqualityComparer<string>
+    public class ObservableDictionary<TKey> : Dictionary<TKey, FixedPointReference>
     {
-        public bool Equals(string x, string y)
-        {
-            if (x == null || y == null)
-                return false;
+        // A predefined set of allowed keys (filter list)
+        private readonly HashSet<TKey> _filterList;
 
-            return string.Equals(
-                x.Replace(" ", "").Trim(),
-                y.Replace(" ", "").Trim(),
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        public int GetHashCode(string obj)
-        {
-            return obj.Replace(" ", "").Trim().ToLowerInvariant().GetHashCode();
-        }
-
-        public ObservableDictionary() { } // The fact I need this to just create empty one is kinda kek.
-
-        public ObservableDictionary(Dictionary<TKey, FixedPointReference> toDictionary)
-        {
-            foreach (var kvp in toDictionary)
-            {
-                Add(kvp.Key, kvp.Value); // Add each key-value pair to the new ObservableDictionary
-            }
-        }
-
+        // Event triggered when a value for a key is changed
         public event Action<TKey> OnValueChanged;
 
+        // Constructor that takes a predefined filter list
+        public ObservableDictionary(HashSet<TKey> filterListReference)
+        {
+            _filterList = filterListReference; // Store the filter list as a HashSet for quick lookups
+        }
+
+        // Override the indexer to control when new entries are allowed to be added
         public new FixedPointReference this[TKey key]
         {
             get
             {
-                if (!ContainsKey(key))
-                {
-                    MyLog.Default.WriteLine(
-                        $"Observable Dictionary The given key '{key}' was not present in the dictionary.");
-                }
+                // Since this dictionary only supports predefined keys, ensure the key exists
+                if (ContainsKey(key)) return base[key];
 
-                return base[key];
+                Logger.LogError("ObservableDictionary",
+                    $"ObservableDictionary: The given key '{key}' was not present in the dictionary.");
+                return null; // Or throw an exception if needed, depending on how you want to handle this
             }
             set
             {
-                // If key is not here already it means it was never needed. Might have broken stuff because of this... 
+                // Only allow new entries if the key is in the filter list
                 if (!ContainsKey(key))
                 {
-                    Add(key, value);
-                    OnValueChanged?.Invoke(key);
-                    return; // Exit after adding to avoid double-setting below
+                    if (_filterList.Contains(key))
+                    {
+                        // Add the key with the provided value if it's allowed by the filter list
+                        Add(key, value);
+                        OnValueChanged?.Invoke(key);
+                    }
+                    else
+                    {
+                        // If the key is not in the filter list, ignore it or log a message
+                        Logger.LogError("ObservableDictionary",
+                            $"ObservableDictionary: The key '{key}' is not allowed to be added.");
+                    }
+
+                    return; // Exit to avoid double-setting below
                 }
 
+                // Only update if the value is different, to avoid unnecessary events
                 if (EqualityComparer<FixedPointReference>.Default.Equals(base[key], value)) return;
 
                 base[key] = value;
@@ -64,18 +61,27 @@ namespace Trash_Sorter.StorageClasses
             }
         }
 
-        public void UpdateValue(TKey key, MyFixedPoint updateToValue)
+        // Method to update the value of an existing key
+        public void UpdateValue(TKey key, MyFixedPoint amount)
         {
-            FixedPointReference currentValueRef;
-            if (!TryGetValue(key, out currentValueRef))
+            if (!ContainsKey(key))
             {
-                Add(key, new FixedPointReference(updateToValue));
+                // Only add the key if it's allowed by the filter list
+                if (_filterList.Contains(key))
+                {
+                    Add(key, new FixedPointReference(amount));
+                    OnValueChanged?.Invoke(key);
+                }
+                else
+                {
+                    MyLog.Default.WriteLine($"ObservableDictionary: The key '{key}' is not allowed to be updated.");
+                }
+
                 return;
             }
 
-            currentValueRef.ItemAmount += updateToValue;
+            base[key].ItemAmount += amount;
             OnValueChanged?.Invoke(key);
         }
     }
-
 }

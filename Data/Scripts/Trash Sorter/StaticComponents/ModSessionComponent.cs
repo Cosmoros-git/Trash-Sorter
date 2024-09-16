@@ -39,7 +39,6 @@ namespace Trash_Sorter.StaticComponents
         public static string GuideData { get; private set; }
         public static Dictionary<string, MyDefinitionId> NameToDefinitionMap { get; private set; }
         public static HashSet<MyDefinitionId> ProcessedItemsDefinitions { get; private set; }
-        public static ObservableDictionary<MyDefinitionId> ItemStorageReference { get; private set; }
 
 
 
@@ -71,7 +70,7 @@ namespace Trash_Sorter.StaticComponents
         }
 
 
-        private const string SettingsLoc = "Trash_Sorter_Settings.txt";
+        private const string SettingLoc = "Trash_Sorter_Settings.txt";
 
         private const string DefaultSettings =
             "Minimum amount of blocks for grid to be managed = 10 \n Time between trying to initialize (in frames) = 2000 \n Is Logger Enabled = true";
@@ -88,7 +87,6 @@ namespace Trash_Sorter.StaticComponents
         {
             NameToDefinitionMap = new Dictionary<string, MyDefinitionId>();
             ProcessedItemsDefinitions = new HashSet<MyDefinitionId>();
-            ItemStorageReference = new ObservableDictionary<MyDefinitionId>();
             UpdateCooldownLimit = 200;
             BlockLimitsToStartManaging = 10;
             GetDefinitions();
@@ -103,10 +101,10 @@ namespace Trash_Sorter.StaticComponents
                 // Define the file path and name (this will be saved in the world storage folder)
 
                 // Check if the file exists in world storage
-                if (MyAPIGateway.Utilities.FileExistsInWorldStorage(SettingsLoc, typeof(ModSessionComponent)))
+                if (MyAPIGateway.Utilities.FileExistsInWorldStorage(SettingLoc, typeof(ModSessionComponent)))
                 {
                     using (var reader =
-                           MyAPIGateway.Utilities.ReadFileInWorldStorage(SettingsLoc,
+                           MyAPIGateway.Utilities.ReadFileInWorldStorage(SettingLoc,
                                typeof(ModSessionComponent)))
                     {
                         var content = reader.ReadToEnd();
@@ -128,7 +126,6 @@ namespace Trash_Sorter.StaticComponents
                 Logger.Log("ModSessionComponent", $"Error loading settings: {ex}");
             }
         }
-
         private static void ParseSettings(string content)
         {
             var lines = content.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
@@ -182,7 +179,7 @@ namespace Trash_Sorter.StaticComponents
             try
             {
                 using (var writer =
-                       MyAPIGateway.Utilities.WriteFileInWorldStorage(SettingsLoc, typeof(ModSessionComponent)))
+                       MyAPIGateway.Utilities.WriteFileInWorldStorage(SettingLoc, typeof(ModSessionComponent)))
                 {
                     writer.Write(DefaultSettings);
                     Logger.Log("ModSessionComponent", "Default settings created and saved.");
@@ -265,16 +262,12 @@ namespace Trash_Sorter.StaticComponents
                 Logger.Log("ModSessionComponent", $"all definitions failed {ex}");
             }
         }
-
         private static void AddToDictionaries(MyDefinitionBase definition)
         {
             var name = definition.DisplayNameText;
-
             NameToDefinitionMap[name] = definition.Id;
-            ItemStorageReference[definition.Id] = new FixedPointReference(0);
             ProcessedItemsDefinitions.Add(definition.Id);
         }
-
         private static void CreateGuideEntries()
         {
             var wat1 = Stopwatch.StartNew();

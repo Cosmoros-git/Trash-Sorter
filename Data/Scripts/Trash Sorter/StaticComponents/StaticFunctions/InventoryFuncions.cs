@@ -1,14 +1,14 @@
 ﻿using System;
-using Sandbox.Game;
 using System.Collections.Generic;
 using System.Linq;
+using Sandbox.Game;
 using Trash_Sorter.StorageClasses;
 using VRage;
 using VRage.Game;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 
-namespace Trash_Sorter.StaticComponents.StaticFunction
+namespace Trash_Sorter.StaticComponents.StaticFunctions
 {
     public static class InventoryFunctions
     {

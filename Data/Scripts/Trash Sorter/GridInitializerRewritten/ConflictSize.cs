@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using Trash_Sorter.BaseClass;
 using Trash_Sorter.StaticComponents;
-using Trash_Sorter.StaticComponents.StaticFunction;
+using Trash_Sorter.StaticComponents.StaticFunctions;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
@@ -17,14 +18,13 @@ namespace Trash_Sorter.GridInitializerRewritten
     /// - The system only activates and fires the <see cref="SizeAchieved"/> event once the total block count across connected grids exceeds the predefined limit.
     /// - Once the <see cref="SizeAchieved"/> event is triggered, the class unsubscribes from all grid events to prevent further tracking.
     /// </remarks>
-    internal class CoflictSize : GridManagerBase
+    public class ConflictSize : GridManagerBase
     {
-        private HashSet<IMyCubeGrid> _connectedGrids; // In theory this is only 1 grid.
-        private IMyEntity _manager;
         private int count;
         private readonly int MinAmount = ModSessionComponent.BlockLimitsToStartManaging;
 
         public event Action SizeAchieved;
+        private IMyCubeBlock ManagerBlock;
 
         protected virtual void OnSizeAchieved()
         {
@@ -33,12 +33,10 @@ namespace Trash_Sorter.GridInitializerRewritten
         }
 
         // Initializer
-        public void GridSizeIssue(ref HashSet<IMyCubeGrid> grids, IMyEntity manager)
+        public void GridSizeIssue()
         {
-            _connectedGrids = grids;
-            _manager = manager;
-
-            foreach (var grid in _connectedGrids)
+            ManagerBlock = (IMyCubeBlock)ThisManager;
+            foreach (var grid in HashCollectionGrids)
             {
                 count += GridFunctions.GridBlockCount(grid);
                 grid.OnBlockAdded += Grid_OnBlockAdded;
@@ -51,22 +49,39 @@ namespace Trash_Sorter.GridInitializerRewritten
         // If grid split or merged count changes
         private void Grid_OnGridSplit(IMyCubeGrid arg1, IMyCubeGrid arg2)
         {
-            if (((IMyCubeBlock)_manager).CubeGrid != arg1)
+            if (ManagerBlock.CubeGrid != arg1)
             {
                 count -= GridFunctions.GridBlockCount(arg1);
-                _connectedGrids.Add(arg2);
-                _connectedGrids.Remove(arg1);
+                HashCollectionGrids.Add(arg2);
+                HashCollectionGrids.Remove(arg1);
             }
             else
             {
                 count -= GridFunctions.GridBlockCount(arg2);
+                HashCollectionGrids.Remove(arg2);
             }
         }
 
         private void Grid_OnGridMerge(IMyCubeGrid arg1, IMyCubeGrid arg2)
         {
-            count = GridFunctions.GridBlockCount(arg1);
-            if (count > MinAmount) OnSizeAchieved();
+            var tempHashGrid = ModObjectPools.HashSetPool<IMyCubeGrid>.Get();
+            try
+            {
+                GridFunctions.TryGetConnectedGrids(arg1, GridLinkTypeEnum.Mechanical, tempHashGrid);
+                count = 0;
+                HashCollectionGrids.Clear();
+                HashCollectionGrids.UnionWith(tempHashGrid);
+                foreach (var grid in tempHashGrid)
+                {
+                    count += GridFunctions.GridBlockCount(grid);
+                }
+
+                if (count > MinAmount) OnSizeAchieved();
+            }
+            finally
+            {
+                ModObjectPools.HashSetPool<IMyCubeGrid>.Return(tempHashGrid);
+            }
         }
 
 
@@ -85,7 +100,7 @@ namespace Trash_Sorter.GridInitializerRewritten
         // Dispose method.
         private void UnsubscribeEvents()
         {
-            foreach (var grid in _connectedGrids)
+            foreach (var grid in HashCollectionGrids)
             {
                 count -= GridFunctions.GridBlockCount(grid);
                 grid.OnBlockAdded -= Grid_OnBlockAdded;

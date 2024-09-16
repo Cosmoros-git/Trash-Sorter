@@ -34,24 +34,14 @@ namespace Trash_Sorter.SorterClasses
         private readonly Dictionary<IMyConveyorSorter, SorterCustomData> sorterDataDictionary =
             new Dictionary<IMyConveyorSorter, SorterCustomData>();
 
-        private readonly Dictionary<string, MyDefinitionId> ReferenceIdDictionary;
-        public readonly List<MyDefinitionId> RemovedEntries;
+        private readonly Dictionary<string, MyDefinitionId> NameToDefinitionMap = ModSessionComponent.NameToDefinitionMap;
+        public readonly List<MyDefinitionId> RemovedEntries = new List<MyDefinitionId>();
 
-        public readonly List<string> AddedEntries;
-        public readonly Dictionary<string, string> ChangedEntries;
-        private Dictionary<string, string> OldEntries;
+        public readonly List<string> AddedEntries = new List<string>();
+        public readonly Dictionary<string, string> ChangedEntries = new Dictionary<string, string>();
+        private Dictionary<string, string> OldEntries = new Dictionary<string, string>();
 
 
-        public SorterDataStorage(Dictionary<string, MyDefinitionId> nameToDefinition)
-        {
-            ReferenceIdDictionary = nameToDefinition;
-            ChangedEntries = new Dictionary<string, string>();
-            AddedEntries = new List<string>();
-            RemovedEntries = new List<MyDefinitionId>();
-            OldEntries = new Dictionary<string, string>();
-        }
-
-       
         public void AddOrUpdateSorterRawData(IMyConveyorSorter sorter)
         {
             var customData = sorter.CustomData;
@@ -85,106 +75,95 @@ namespace Trash_Sorter.SorterClasses
         /// <returns></returns>
         public List<string> TrackChanges(IMyConveyorSorter sorter, out bool dataFound)
         {
-       
             dataFound = false;
 
-
+            // Clear existing tracking lists
             RemovedEntries.Clear();
             AddedEntries.Clear();
             ChangedEntries.Clear();
 
-
+            // Get the new custom data and split by lines (handling both Windows and Unix new lines)
             var newCustomData = sorter.CustomData;
-           
+            var newCustomDataList = string.IsNullOrEmpty(newCustomData)
+                ? new List<string>()
+                : new List<string>(newCustomData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None));
 
-            var newCustomDataList = !string.IsNullOrEmpty(newCustomData)
-                ? new List<string>(newCustomData.Split(new[] { "\r\n", "\n" },
-                    StringSplitOptions.None)) // Handle both Windows (\r\n) and Unix-style (\n) new lines
-                : new List<string>();
-
-            
+            // Find the starting index for processing data (after <Trash filter ON>)
             var startIndex = newCustomDataList.FindIndex(line => line.Contains("<Trash filter ON>"));
             if (startIndex == -1)
             {
                 Logger.Log(ClassName, "TrackChanges: '<Trash filter ON>' not found in the custom data.");
-                dataFound = false;
                 return newCustomDataList;
             }
+            startIndex++; // Move past the tag line
 
-            startIndex += 1;
+            // Get or initialize the sorter data
             SorterCustomData customDataAccess;
             if (!sorterDataDictionary.TryGetValue(sorter, out customDataAccess))
             {
-                customDataAccess = sorterDataDictionary[sorter] = new SorterCustomData();
-                OldEntries = customDataAccess.ProcessedCustomData;
+                customDataAccess = new SorterCustomData();
+                sorterDataDictionary[sorter] = customDataAccess;
             }
-            else
-            {
-                OldEntries = customDataAccess.ProcessedCustomData;
-            }
-            
+
+            // Get the old entries and new data after the start index
+            var oldEntries = customDataAccess.ProcessedCustomData;
             var newDataSet = newCustomDataList.Skip(startIndex).ToList();
             var newDataDictionary = new Dictionary<string, string>();
 
+            // Process the new data lines
             foreach (var line in newDataSet)
             {
-                if (line.StartsWith("//"))
-                {
-                    continue;
-                }
+                if (line.StartsWith("//")) continue; // Skip comments
 
                 var parts = line.Split('|').Select(part => part.Trim()).ToArray();
-                var keyValue = parts.Length == 0 ? line : parts[0]; // Treat the entire line as key if no separator
-                var value = parts.Length > 1
-                    ? string.Join(" | ", parts.Skip(1))
-                    : "0|0"; // Default value if no separator
+                var keyValue = parts.Length == 0 ? line : parts[0]; // Use entire line as key if no separator
+                var value = parts.Length > 1 ? string.Join(" | ", parts.Skip(1)) : "0|0"; // Default value if missing
 
-                keyValue = keyValue.Trim();
-                value = value.Trim();
-
-                newDataDictionary[keyValue] = value;
+                newDataDictionary[keyValue.Trim()] = value.Trim();
             }
 
+            // Mark data as found since <Trash filter ON> exists
             dataFound = true;
 
-            // Track removed entries
-            foreach (var entry in OldEntries.Keys)
+            // Track removed, added, and changed entries in one pass
+            foreach (var entry in oldEntries.Keys)
             {
-                if (newDataDictionary.ContainsKey(entry)) continue;
-
-                MyDefinitionId defId;
-                if (!ReferenceIdDictionary.TryGetValue(entry, out defId)) continue;
-
-                RemovedEntries.Add(defId);
+                string newValue;
+                if (!newDataDictionary.TryGetValue(entry, out newValue))
+                {
+                    // Track removed entries
+                    MyDefinitionId defId;
+                    if (NameToDefinitionMap.TryGetValue(entry, out defId))
+                    {
+                        RemovedEntries.Add(defId);
+                    }
+                }
+                else
+                {
+                    // Track changed entries
+                    var oldValue = oldEntries[entry];
+                    if (!string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ChangedEntries[entry] = newValue;
+                    }
+                }
             }
 
             // Track added entries
             foreach (var entry in newDataDictionary.Keys)
             {
-                if (OldEntries.ContainsKey(entry)) continue;
-
-                AddedEntries.Add(entry + " | " + newDataDictionary[entry]);
+                if (!oldEntries.ContainsKey(entry))
+                {
+                    AddedEntries.Add($"{entry} | {newDataDictionary[entry]}");
+                }
             }
 
-            // Track changed entries
-            foreach (var entry in OldEntries.Keys)
-            {
-                string value;
-                if (!newDataDictionary.TryGetValue(entry, out value)) continue;
-
-                var oldValue = OldEntries[entry];
-                var newValue = value.Trim();
-
-                // Compare normalized values to detect changes
-                if (string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase)) continue;
-
-                ChangedEntries.Add(entry, newValue);
-            }
-
+            // Update the custom data
             customDataAccess.ProcessedCustomData = newDataDictionary;
 
             return newCustomDataList;
         }
+
 
 
         /// <summary>
