@@ -13,8 +13,18 @@ namespace Trash_Sorter.GridInitializerRewritten
 {
     public class GridManagerRewritten : GridManagerBase
     {
-        private readonly int[] SubscribedEvents = { 0, 0, 0, 0 };
+        [Flags]
+        public enum SubscribedEventFlags
+        {
+            None = 0,               
+            InitInvoked = 1 << 0,     
+            OwnerSubscribed = 1 << 1, 
+            ManagerRemoved = 1 << 2, 
+            SomeOtherEvent = 1 << 3   // Equivalent to SubscribedEvents[3]
+        }
 
+
+        private SubscribedEventFlags _subscribedEvents = SubscribedEventFlags.None;
 
         private bool _isSizeSubscribed;
         private bool _isCounting;
@@ -26,7 +36,7 @@ namespace Trash_Sorter.GridInitializerRewritten
             GridStorage = gridStorage;
             InitializationStep = 0;
             InvokeInit += Init;
-            SubscribedEvents[0] = 1;
+            _subscribedEvents |= SubscribedEventFlags.InitInvoked; // Set the InitInvoked flag
         }
 
         public void Counter()
@@ -80,57 +90,56 @@ namespace Trash_Sorter.GridInitializerRewritten
             }
         }
 
-
         // Get grids to manage
         private void GetGrids()
         {
-            var grid = ((IMyCubeBlock)ThisManager).CubeGrid;
-            GridFunctions.TryGetConnectedGrids(grid, GridLinkTypeEnum.Mechanical, GridStorage.ManagedGrids);
+            GridFunctions.TryGetConnectedGrids(((IMyCubeBlock)ThisManager).CubeGrid, GridLinkTypeEnum.Mechanical, GridStorage.ManagedGrids);
+            InitializationStep = InitializationStepGrid.MinSizeConfirmation;
+            Logger.Log(ClassName,$"Grids collected, amount of grids {GridStorage.ManagedGrids.Count}");
             OnInvokeInit();
         }
-
 
         // Check if grid size is valid.
         private void GridSizeCheck()
         {
-            // Check if there are multiple grids or if the block count exceeds the limit
             if (GridStorage.ManagedGrids.Count > 1 || GridFunctions.GridBlockCount(HashCollectionGrids) >=
                 ModSessionComponent.BlockLimitsToStartManaging)
             {
                 InitializationStep = InitializationStepGrid.OwnerConfirmation;
-                SubscribedEvents[0] = 0;
+                Logger.Log(ClassName, $"Grid size check passed. {((IMyCubeBlock)ThisManager).CubeGrid.CustomName}");
+                _subscribedEvents &= ~SubscribedEventFlags.InitInvoked; // Clear the InitInvoked flag
                 if (_isSizeSubscribed) ConflictSize.SizeAchieved -= OnInvokeInit;
                 OnInvokeInit();
             }
             else
             {
                 if (_isSizeSubscribed) return;
+                Logger.Log(ClassName, $"Grid size check failed. {((IMyCubeBlock)ThisManager).CubeGrid.CustomName}");
                 ConflictSize.GridSizeIssue();
                 _isSizeSubscribed = true;
                 ConflictSize.SizeAchieved += OnInvokeInit;
             }
         }
 
-
         private void OwnerCheck()
         {
-            if (SubscribedEvents[1] != 1)
+            if ((_subscribedEvents & SubscribedEventFlags.OwnerSubscribed) == 0)
             {
-                OwnerChecks.IsThisOwner += OwnerChecks_IsThisOwner;
-                SubscribedEvents[1] = 1;
+                IsThisOwner += OwnerChecks_IsThisOwner;
+                _subscribedEvents |= SubscribedEventFlags.OwnerSubscribed; // Set the OwnerSubscribed flag
             }
-
-            OwnerChecks.CheckOwner(ThisManager, GridStorage.ManagedGrids);
+            Logger.Log(ClassName, $"Manager with Id: {ThisManager.EntityId} on grid: {((IMyCubeBlock)ThisManager).CubeGrid.CustomName} processing ownership claim");
+            OwnerChecks.CheckOwner(ThisManager);
         }
 
         private void OwnerChecks_IsThisOwner(bool obj)
         {
             if (obj)
             {
-                if (SubscribedEvents[1] != 0)
+                if ((_subscribedEvents & SubscribedEventFlags.OwnerSubscribed) != 0)
                 {
-                    OwnerChecks.IsThisOwner -= OwnerChecks_IsThisOwner;
-                    SubscribedEvents[1] = 0;
+                    IsThisOwner -= OwnerChecks_IsThisOwner;
+                    _subscribedEvents &= ~SubscribedEventFlags.OwnerSubscribed; // Clear the OwnerSubscribed flag
                 }
 
                 OnUpdateRequired(MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME);
@@ -141,20 +150,19 @@ namespace Trash_Sorter.GridInitializerRewritten
                 ConflictManager.OwnerConflict();
                 InitializationStep = InitializationStepGrid.GridInfoCollection;
                 PartialDispose();
-                if (SubscribedEvents[2] == 1) return;
+                if ((_subscribedEvents & SubscribedEventFlags.ManagerRemoved) != 0) return;
                 ConflictManager.ManagerRemoved += Init;
-                SubscribedEvents[1] = 1;
+                _subscribedEvents |= SubscribedEventFlags.OwnerSubscribed; // Set the OwnerSubscribed flag
             }
         }
-
 
         public override void Dispose()
         {
             base.Dispose();
-            if (SubscribedEvents[0] == 1) InvokeInit -= Init;
-            if (SubscribedEvents[1] == 1) OwnerChecks.IsThisOwner -= OwnerChecks_IsThisOwner;
-            if (SubscribedEvents[2] == 1) ConflictManager.ManagerRemoved -= Init;
-            if (SubscribedEvents[3] == 1) return;
+            if ((_subscribedEvents & SubscribedEventFlags.InitInvoked) != 0) InvokeInit -= Init;
+            if ((_subscribedEvents & SubscribedEventFlags.OwnerSubscribed) != 0) IsThisOwner -= OwnerChecks_IsThisOwner;
+            if ((_subscribedEvents & SubscribedEventFlags.ManagerRemoved) != 0) ConflictManager.ManagerRemoved -= Init;
         }
     }
+
 }

@@ -1,5 +1,6 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using System;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
@@ -152,6 +153,24 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
                     block is IMyPowerProducer);
         }
 
-        
+        /// <summary>
+        /// Checks if the specified terminal block's custom name contains the given value, using a case-insensitive comparison.
+        /// </summary>
+        /// <param name="block">The terminal block whose custom name will be checked.</param>
+        /// <param name="value">The string value to search for within the custom name of the terminal block.</param>
+        /// <returns>
+        /// True if the custom name of the terminal block contains the specified value, otherwise false.
+        /// </returns>
+        /// <remarks>
+        /// This method uses a case-insensitive comparison to check if the custom name contains the value.
+        /// </remarks>
+        public static bool ContainsString(IMyTerminalBlock block, string value)
+        {
+            // Check for null block or value to prevent exceptions
+            if (block == null || value == null) return false;
+
+            return block.CustomName.Contains(value, StringComparison.OrdinalIgnoreCase);
+        }
+
     }
 }

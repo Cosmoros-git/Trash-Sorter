@@ -2,30 +2,77 @@
 using System.Collections.Generic;
 using System.Linq;
 using ParallelTasks;
+using Trash_Sorter.BaseClass;
+using Trash_Sorter.StaticComponents;
 using Trash_Sorter.StaticComponents.StaticFunctions;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
 namespace Trash_Sorter.StorageClasses
 {
-    public class ObservableGridStorage
+    public class ObservableGridStorage : ModBase
     {
         public HashSet<IMyCubeGrid> ManagedGrids = new HashSet<IMyCubeGrid>();
 
-        public event Action<IMyCubeGrid> GridRemoved;
-        public event Action<IMyCubeGrid> GridAdded;
+
         public event Action<bool> GridSplit;
         public event Action<IMyCubeGrid> GridUpdated;
 
-        public readonly IMyEntity ManagingEntity;
         public readonly IMyCubeBlock ManagingBlock;
 
-        public ObservableGridStorage(IMyEntity entity)
+
+        private void GridMergeHandler(IMyCubeGrid arg1, IMyCubeGrid arg2)
         {
-            ManagingEntity = entity;
-            ManagingBlock = (IMyCubeBlock)entity;
+            OnGridMerge(arg1,arg2);
+        }
+        private void GridSplitHandler(IMyCubeGrid arg1, IMyCubeGrid arg2)
+        {
+            OnGridSplit(arg1, arg2);
+        }
+        private void GridCloseHandler(IMyEntity myEntity)
+        {
+            Grid_OnClosing(myEntity);
         }
 
+        private bool _isSubscribed; 
+
+
+        public ObservableGridStorage()
+        {
+            ManagingBlock = (IMyCubeBlock)ThisManager;
+            
+        }
+        /// <summary>
+        /// Only call when grid owner has worked its magic.
+        /// </summary>
+        public void SubscribeAllGrids()
+        {
+            if (_isSubscribed) return;
+            foreach (var grid in ManagedGrids.Where(grid => grid != null))
+            {
+                grid.OnGridMerge += GridMergeHandler;
+                grid.OnGridSplit += GridSplitHandler;
+                grid.OnClosing += GridCloseHandler;
+            }
+            _isSubscribed = true;
+            Logger.LogWarning(ClassName,$"All grids subscribed. Amount of subscribed grids {ManagedGrids.Count}, manager Id: {ThisManager.EntityId}");
+        }
+
+        /// <summary>
+        /// This is for partial dispose. When manager was active and I need to dispose but not fully
+        /// </summary>
+        public void UnsubscribeAllGrids()
+        {
+            if(!_isSubscribed)return;
+            foreach (var grid in ManagedGrids.Where(grid => grid != null))
+            {
+                grid.OnGridMerge -= GridMergeHandler;
+                grid.OnGridSplit -= GridSplitHandler;
+                grid.OnClosing -= GridCloseHandler;
+            }
+            _isSubscribed = false;
+            Logger.LogWarning(ClassName, $"All grids subscribed. Amount of subscribed grids {ManagedGrids.Count}, manager Id: {ThisManager.EntityId}");
+        }
 
         private void GetDifferences()
         {
@@ -38,7 +85,7 @@ namespace Trash_Sorter.StorageClasses
                 GridFunctions.TryGetConnectedGrids(ManagingBlock.CubeGrid, GridLinkTypeEnum.Mechanical, tempSet);
 
                 // Special case: if exactly one grid is added
-                if (tempSet.Count == ManagedGrids.Count + 1)
+                if (tempSet.Count>1&& tempSet.Count == ManagedGrids.Count + 1)
                 {
                     tempSet.ExceptWith(ManagedGrids); // Find the new grid
                     SubscribeGrids(tempSet);
@@ -75,13 +122,13 @@ namespace Trash_Sorter.StorageClasses
             if (grid == null) return;
             if (!ManagedGrids.Add(grid)) return;
 
-            GridAdded?.Invoke(grid);
+            OnGridAdded(grid);
             grid.OnGridMerge += OnGridMerge;
             grid.OnGridSplit += OnGridSplit;
             grid.OnClosing += Grid_OnClosing;
         }
 
-        public void SubscribeGrids(HashSet<IMyCubeGrid> gridsToAdd)
+        public void SubscribeGrids(IEnumerable<IMyCubeGrid> gridsToAdd)
         {
             foreach (var grid in gridsToAdd)
             {
@@ -94,13 +141,13 @@ namespace Trash_Sorter.StorageClasses
             if (grid == null) return;
             if (!ManagedGrids.Remove(grid)) return;
 
-            GridRemoved?.Invoke(grid);
+            OnGridRemoved(grid);
             grid.OnGridMerge -= OnGridMerge;
             grid.OnGridSplit -= OnGridSplit;
             grid.OnClosing -= Grid_OnClosing;
         }
 
-        public void UnsubscribeGrid(HashSet<IMyCubeGrid> gridsToRemove)
+        public void UnsubscribeGrid(IEnumerable<IMyCubeGrid> gridsToRemove)
         {
             foreach (var grid in gridsToRemove)
             {
@@ -154,6 +201,18 @@ namespace Trash_Sorter.StorageClasses
 
             // Update managed grids and subscribe new ones based on the merge result
             GetDifferences();
+        }
+
+        public override void PartialDispose()
+        {
+            base.PartialDispose();
+            UnsubscribeAllGrids();
+        }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+            UnsubscribeAllGrids();
         }
     }
 }

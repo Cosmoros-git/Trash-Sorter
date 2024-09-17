@@ -16,51 +16,20 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
         /// </summary>
         public enum GridClaimResult : byte
         {
-            Owned = 0, // 1: Already owned by given Id
-            NotClaimed = 1, // 2: Not claimed 
-            OwnedByOther = 2, // 3: Owned by another id
-        }
-
-
-        /// <summary>
-        /// Represents the result of processing grids that are connected to a reference grid.
-        /// This class categorizes connected grids into four groups:
-        /// <para>- Owned grids: Grids that are already owned by the system managing them.</para>
-        /// <para>- Unowned grids: Grids that are not yet claimed by any system.</para>
-        /// <para>- Grids owned by a different system: Grids managed by a different system than the one performing the processing.</para>
-        /// <para>- Connected grids: All grids that are connected to the reference grid.</para>
-        /// </summary>
-        public class GridProcessingResult
-        {
             /// <summary>
-            /// Gets or sets the set of grids that are owned by the system performing the grid processing.
+            /// The grid is already owned by the given ID.
             /// </summary>
-            public HashSet<IMyCubeGrid> OwnedGrids { get; set; } = new HashSet<IMyCubeGrid>();
+            Owned = 0,
 
             /// <summary>
-            /// Gets or sets the set of grids that are not yet owned by any system.
+            /// The grid is not claimed by any system.
             /// </summary>
-            public HashSet<IMyCubeGrid> UnownedGrids { get; set; } = new HashSet<IMyCubeGrid>();
+            NotClaimed = 1,
 
             /// <summary>
-            /// Gets or sets the set of grids that are owned by a different system or manager.
-            /// These grids are managed by a system with a different ID from the one performing the grid processing.
+            /// The grid is owned by another system with a different ID.
             /// </summary>
-            public HashSet<IMyCubeGrid> ForeignOwnedGrids { get; set; } = new HashSet<IMyCubeGrid>();
-
-            /// <summary>
-            /// Gets or sets the set of grids that are connected to the reference grid, 
-            /// including owned, unowned, and grids owned by different systems.
-            /// </summary>
-            public HashSet<IMyCubeGrid> ConnectedGrids { get; set; } = new HashSet<IMyCubeGrid>();
-
-            /// <summary>
-            /// Hash set of manager ids, should never go above 1.
-            /// If its size = 0 there is no other manager.
-            /// </summary>
-            public HashSet<string> OtherManagerId { get; set; } = new HashSet<string>();
-
-            public HashSet<IMyEntity> OtherManagerEntity { get; set; } = new HashSet<IMyEntity>();
+            OwnedByOther = 2,
         }
 
 
@@ -75,7 +44,6 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
         /// <param name="containedManagerId">An output parameter that contains the ID currently stored in the grid, if any.</param>
         /// <returns>
         /// A <see cref="GridClaimResult"/> indicating the status of the claim:
-        /// - <c>Claimed</c>: The grid is successfully claimed by the system.
         /// - <c>Owned</c>: The grid is already owned by the entity with the specified ID.
         /// - <c>NotClaimed</c>: No claim or stored ID exists for the grid.
         /// - <c>OwnedByOther</c>: The grid is owned by another entity with a different ID.
@@ -128,48 +96,37 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
             }
         }
 
-
         /// <summary>
-        /// Processes all grids connected to a reference grid via a specified grid link type,
-        /// categorizing them into sets based on their ownership status.
+        /// Processes all grids in the provided collection to categorize them based on their ownership status.
         /// </summary>
         /// <param name="modGuid">The unique identifier (GUID) used by the mod or system to claim ownership of the grids.</param>
         /// <param name="managerId">The ID of the system or entity attempting to manage the grids.</param>
-        /// <param name="referenceGrid">The reference grid to which other grids are connected via a specified link type.</param>
-        /// <param name="type">The type of grid link to be considered for finding connected grids (e.g., Mechanical, Electrical, Logical).</param>
+        /// <param name="connectedGrids">A collection of grids to be processed, implementing <see cref="HashSet{IMyCubeGrid}"/>.</param>
+        /// <param name="tempGridResult">A <see cref="ModObjectPools.GridProcessingResult"/> object to store the categorized grids.</param>
         /// <returns>
-        /// A <see cref="GridProcessingResult"/> object containing categorized grids:
+        /// A <see cref="ModObjectPools.GridProcessingResult"/> object containing categorized grids:
         /// <list type="bullet">
         /// <item><c>OwnedGrids</c>: Grids that are already owned by the system using the provided <paramref name="managerId"/>.</item>
         /// <item><c>UnownedGrids</c>: Grids that are not yet claimed by any system.</item>
-        /// <item><c>ForeignOwnedGrids</c>: Grids that are owned by a system with a different ID than the one provided in <paramref name="managerId"/>.</item>
-        /// <item><c>ConnectedGrids</c>: All grids that are connected to the <paramref name="referenceGrid"/>.</item>
+        /// <item><c>ForeignOwnedGrids</c>: Grids that are owned by a different system with a different ID than the one provided in <paramref name="managerId"/>.</item>
         /// </list>
         /// </returns>
         /// <remarks>
-        /// This overload is useful for scenarios where a reference grid is provided, and grids connected to it by a specific link type (e.g., Mechanical or Electrical) need to be categorized.
+        /// This overload is used when a predefined collection of grids is available for processing, rather than starting from a reference grid.
         /// </remarks>
-        public static GridProcessingResult ProcessConnectedGrids(
-            Guid modGuid,
+        public static void ProcessConnectedGrids(Guid modGuid,
             string managerId,
-            IMyCubeGrid referenceGrid,
-            GridLinkTypeEnum type)
+            HashSet<IMyCubeGrid> connectedGrids, ModObjectPools.GridProcessingResult tempGridResult)
         {
-            var result = new GridProcessingResult
-            {
-                // Get all connected grids
-                ConnectedGrids = TryGetConnectedGrids(referenceGrid, type)
-            };
-
             // Early exit if there are no connected grids
-            if (result.ConnectedGrids.Count == 0)
+            if (connectedGrids.Count == 0)
             {
                 Logger.Log("ProcessConnectedGrids", "No connected grids found.");
-                return result;
+                return;
             }
 
             // Process each connected grid
-            foreach (var grid in result.ConnectedGrids)
+            foreach (var grid in connectedGrids)
             {
                 string containedManagerId;
                 var gridClaimResult = CheckGridClaimStatus(modGuid, grid, managerId, out containedManagerId);
@@ -181,119 +138,34 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
                 switch (gridClaimResult)
                 {
                     case GridClaimResult.Owned:
-                        result.OwnedGrids.Add(grid);
+                        tempGridResult.OwnedGrids.Add(grid);
                         break;
                     case GridClaimResult.NotClaimed:
-                        result.UnownedGrids.Add(grid);
+                        tempGridResult.UnownedGrids.Add(grid);
                         break;
                     case GridClaimResult.OwnedByOther:
-                        result.ForeignOwnedGrids.Add(grid);
-                        result.OtherManagerId.Add(containedManagerId);
+                        tempGridResult.ForeignOwnedGrids.Add(grid);
+                        tempGridResult.OtherManagerId.Add(containedManagerId);
                         break;
                 }
             }
 
             // Log the final result summary
             Logger.Log("ProcessConnectedGrids",
-                $"Finished processing grids. Owned: {result.OwnedGrids.Count}, Unowned: {result.UnownedGrids.Count}, " +
-                $"Owned by different ID: {result.ForeignOwnedGrids.Count}");
-
-            return result;
-        }
-
-
-        /// <summary>
-        /// Processes all grids in the provided collection to categorize them based on their ownership status.
-        /// </summary>
-        /// <param name="modGuid">The unique identifier (GUID) used by the mod or system to claim ownership of the grids.</param>
-        /// <param name="managerId">The ID of the system or entity attempting to manage the grids.</param>
-        /// <param name="connectedGrids">A collection of grids to be processed, implementing <see cref="HashSet{IMyCubeGrid}"/>.</param>
-        /// <returns>
-        /// A <see cref="GridProcessingResult"/> object containing categorized grids:
-        /// <list type="bullet">
-        /// <item><c>OwnedGrids</c>: Grids that are already owned by the system using the provided <paramref name="managerId"/>.</item>
-        /// <item><c>UnownedGrids</c>: Grids that are not yet claimed by any system.</item>
-        /// <item><c>ForeignOwnedGrids</c>: Grids that are owned by a different system with a different ID than the one provided in <paramref name="managerId"/>.</item>
-        /// </list>
-        /// </returns>
-        /// <remarks>
-        /// This overload is used when a predefined collection of grids is available for processing, rather than starting from a reference grid.
-        /// </remarks>
-        public static GridProcessingResult ProcessConnectedGrids(
-            Guid modGuid,
-            string managerId,
-            HashSet<IMyCubeGrid> connectedGrids)
-        {
-            var result = new GridProcessingResult
-            {
-                // Get all connected grids
-                ConnectedGrids = connectedGrids
-            };
-
-            // Early exit if there are no connected grids
-            if (result.ConnectedGrids.Count == 0)
-            {
-                Logger.Log("ProcessConnectedGrids", "No connected grids found.");
-                return result;
-            }
-
-            // Process each connected grid
-            foreach (var grid in result.ConnectedGrids)
-            {
-                string containedManagerId;
-                var gridClaimResult = CheckGridClaimStatus(modGuid, grid, managerId, out containedManagerId);
-
-                Logger.Log("ProcessConnectedGrids", $"Processing grid '{grid.DisplayName}' with manager ID '{managerId}', stored ID '{containedManagerId}'");
-
-                // Categorize the grid based on its claim result
-                switch (gridClaimResult)
-                {
-                    case GridClaimResult.Owned:
-                        result.OwnedGrids.Add(grid);
-                        break;
-                    case GridClaimResult.NotClaimed:
-                        result.UnownedGrids.Add(grid);
-                        break;
-                    case GridClaimResult.OwnedByOther:
-                        result.ForeignOwnedGrids.Add(grid);
-                        result.OtherManagerId.Add(containedManagerId);
-                        break;
-                }
-            }
-
-            // Log the final result summary
-            Logger.Log("ProcessConnectedGrids",
-                $"Finished processing grids. Owned: {result.OwnedGrids.Count}, Unowned: {result.UnownedGrids.Count}, " +
-                $"Owned by different ID: {result.ForeignOwnedGrids.Count}");
-
-            return result;
+                $"Finished processing grids. Owned: {tempGridResult.OwnedGrids.Count}, Unowned: {tempGridResult.UnownedGrids.Count}, " +
+                $"Owned by different ID: {tempGridResult.ForeignOwnedGrids.Count}");
         }
 
         /// <summary>
         /// Retrieves the grid group data for the specified grid and connection type.
         /// </summary>
-        /// <param name="grid">
-        /// The grid from which to retrieve the connected grid group.
-        /// If the grid is null, the method returns null.
-        /// </param>
-        /// <param name="type">
-        /// The type of connection to consider when retrieving the grid group (e.g., Mechanical, Electrical, Logical).
-        /// </param>
+        /// <param name="grid">The grid from which to retrieve the connected grid group. If the grid is null, the method returns null.</param>
+        /// <param name="type">The type of connection to consider when retrieving the grid group (e.g., Mechanical, Electrical, Logical).</param>
         /// <returns>
-        /// An instance of <see cref="IMyGridGroupData"/> representing the grid group connections.
-        /// Returns null if the grid is null or if the grid group data cannot be retrieved.
+        /// An instance of <see cref="IMyGridGroupData"/> representing the grid group connections. Returns null if the grid is null or if the grid group data cannot be retrieved.
         /// </returns>
         /// <remarks>
-        /// <para>
-        /// The returned <see cref="IMyGridGroupData"/> instance is a pooled object. Do not store references to it beyond immediate use.
-        /// </para>
-        /// <para>
-        /// Subscribe to the <see cref="IMyGridGroupData.OnReleased"/> event to clean up any event handlers or references when the grid group data is released.
-        /// </para>
-        /// <para>
-        /// Use the <see cref="SetVariable"/>, <see cref="GetVariable{T}"/>, and <see cref="TryGetVariable{T}"/> methods to store and retrieve data associated with the grid group.
-        /// Variables are cleared automatically when <see cref="IMyGridGroupData.OnReleased"/> is invoked.
-        /// </para>
+        /// The returned <see cref="IMyGridGroupData"/> instance is a pooled object. Do not store references to it beyond immediate use. Subscribe to the <see cref="IMyGridGroupData.OnReleased"/> event to clean up any event handlers or references when the grid group data is released.
         /// </remarks>
         public static IMyGridGroupData GetGridGroup(IMyCubeGrid grid, GridLinkTypeEnum type)
         {
@@ -306,7 +178,8 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
             var gridGroupData = grid.GetGridGroup(type);
             if (gridGroupData == null)
             {
-                Logger.LogError("GetGridGroup", $"Failed to retrieve grid group data for grid ID: {grid.EntityId} with link type: {type}");
+                Logger.LogError("GetGridGroup",
+                    $"Failed to retrieve grid group data for grid ID: {grid.EntityId} with link type: {type}");
             }
 
             return gridGroupData;
@@ -322,7 +195,8 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
         /// <returns>
         /// A boolean indicating whether connected grids were successfully retrieved. Returns false if the grid or its grid group is null.
         /// </returns>
-        public static bool TryGetConnectedGrids(IMyCubeGrid grid, GridLinkTypeEnum type, HashSet<IMyCubeGrid> connectedGrids)
+        public static bool TryGetConnectedGrids(IMyCubeGrid grid, GridLinkTypeEnum type,
+            HashSet<IMyCubeGrid> connectedGrids)
         {
             // Clear the passed grid set before populating it
             connectedGrids.Clear();
@@ -361,7 +235,8 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
         /// The number of blocks in the grid. If the grid is null or the cast to <see cref="MyCubeGrid"/> fails, returns 0.
         /// </returns>
         /// <remarks>
-        /// This method casts the provided <see cref="IMyCubeGrid"/> to <see cref="MyCubeGrid"/> to access the <c>BlocksCount</c> property. If the cast is not successful, it returns 0.
+        /// This method casts the provided <see cref="IMyCubeGrid"/> to <see cref="MyCubeGrid"/> to access the <c>BlocksCount</c> property.
+        /// If the cast is not successful, it returns 0.
         /// </remarks>
         public static int GridBlockCount(IMyCubeGrid grid)
         {
@@ -378,8 +253,9 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
         /// This method calculates the total block count by summing the block counts of each grid
         /// using the <see cref="GridBlockCount(IMyCubeGrid)"/> method for individual grids.
         /// </summary>
-        /// <param name="grids">A collection of grids implementing <see cref="IEnumerable{IMyCubeGrid}"/>.
-        /// The collection can be of any type, such as <see cref="List{IMyCubeGrid}"/>, <see cref="HashSet{IMyCubeGrid}"/>, or an array.
+        /// <param name="grids">
+        /// A collection of grids implementing <see cref="IEnumerable{IMyCubeGrid}"/>. The collection can be of any type,
+        /// such as <see cref="List{IMyCubeGrid}"/>, <see cref="HashSet{IMyCubeGrid}"/>, or an array.
         /// </param>
         /// <returns>
         /// The total number of blocks across all grids in the collection. If the collection is empty or null, returns 0.
@@ -393,8 +269,5 @@ namespace Trash_Sorter.StaticComponents.StaticFunctions
         {
             return grids.Sum(GridBlockCount);
         }
-
-
-
     }
 }
